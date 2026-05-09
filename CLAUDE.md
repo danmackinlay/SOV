@@ -31,6 +31,7 @@ These are documented with full reasoning in [`docs/decisions/`](docs/decisions/)
 - **Decisions are durable.** When we make an architectural choice (or revise one), record it as a short ADR in [`docs/decisions/`](docs/decisions/). Format: context → decision → consequences. Keep them under a page.
 - **Scripts are launchable.** Every script that spins up cloud infra prints its destruction command and its cost cap on launch. No surprises on the credit card.
 - **The rationale documents are external.** They live on Dan's blog ([post](https://danmackinlay.name/notebook/aus_sovereign_llm.html), [technical](https://danmackinlay.name/notebook/aus_sovereign_llm_technical.html)) and are the canonical source. SOV doesn't mirror them, to avoid drift.
+- **The repo is public.** Treat anything you write as world-readable. Operational secrets and member info do not belong here — see [`docs/context/public-repo-policy.md`](docs/context/public-repo-policy.md) for the full perimeter and pre-commit checks.
 
 ## When asked to "build the next thing"
 
