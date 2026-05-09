@@ -1,0 +1,26 @@
+.DS_Store
+
+# Local secrets and runtime state
+.env
+.env.local
+*.pem
+*.key
+secrets/
+
+# Cloud provider state
+.terraform/
+*.tfstate
+*.tfstate.backup
+.terraform.lock.hcl
+
+# Python / venv (in case any tooling lands)
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Editor / scratch
+.vscode/
+.idea/
+*.swp
+scratch/

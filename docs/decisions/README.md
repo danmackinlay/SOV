@@ -1,0 +1,9 @@
+# Architectural Decision Records
+
+Numbered ADRs documenting the *why* behind architectural choices in SOV. Format is informal — context, decision, consequences. Keep each under a page. When a decision is revised, write a new ADR rather than editing the old one and add a "Superseded by NNNN" note at the top.
+
+| # | Title | Status |
+|---|---|---|
+| [0001](0001-cloud-providers.md) | Cloud GPU providers for the audition | Accepted |
+| [0002](0002-inference-engine.md) | Inference engine: vLLM primary | Accepted |
+| [0003](0003-audition-surface-and-auth.md) | Audition surface and ephemeral auth model | Accepted |
