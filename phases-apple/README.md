@@ -46,7 +46,7 @@ Three resident-on-disk aliases, math-reasoning-prioritised. **The picks below ar
 | Alias | Reference pick (96 GB+, as of 2026-05) | Quant | Resident | Use |
 |---|---|---|---|---|
 | `local-small` | [Qwen3.5-35B-A3B](https://huggingface.co/Qwen/Qwen3.5-35B-A3B) (MoE, 3 B active; thinking-by-default, natively VL) | MLX 4-bit | ~23 GB | Daily driver. Successor to Qwen3-30B-A3B (the SOV cloud phase-0 model). |
-| `local-math` | [DeepSeek-R1-Distill-Qwen-32B](https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-32B) | MLX 4-bit | ~19 GB | Mathematics, proofs, formal reasoning. (DeepSeek-Math-V2 is the open-weight math frontier as of late 2025 but is 685 B and has no MLX port; this is the practical small-model pick.) |
+| `local-math` | [DeepSeek-R1-0528-Qwen3-8B](https://huggingface.co/deepseek-ai/DeepSeek-R1-0528-Qwen3-8B) | MLX 4-bit | ~5 GB | Mathematics, proofs, formal reasoning. 8 B distill that ties Qwen3-235B-Thinking on AIME-2024. Heavier alternative for non-AIME-style math (formal proofs, abstract algebra): [DeepSeek-R1-Distill-Qwen-32B](https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-32B) (MLX 4-bit, ~19 GB). DeepSeek-Math-V2 is the open-weight math frontier but is 685 B with no MLX port. |
 | `local-big` | [Qwen3.5-122B-A10B](https://huggingface.co/Qwen/Qwen3.5-122B-A10B) (MoE, 10 B active) | MLX 4-bit | ~65 GB | Stretch model. Smaller and faster than Qwen3-235B-A22B at comparable quality; the new sweet spot for 96 GB+ Macs. |
 
 Add `anthropic-claude` and `anthropic-haiku` to the same LiteLLM config when you want online cloud routing.
@@ -57,13 +57,13 @@ Apple Silicon Macs span 16 GB to 192 GB+ of unified memory; the right pick per a
 
 | Unified RAM | `local-small` | `local-math` | `local-big` | Notes |
 |---|---|---|---|---|
-| 16 GB | Qwen3-class 4 B (dense) | — | — | LLM headroom tight; close other apps. No math/stretch tier. |
-| 24 GB | Qwen3-class 8 B–14 B (dense, tight at 14 B) | DeepSeek-R1-Distill-Qwen-7B | — | First viable tier for "real" reasoning. |
-| 32–48 GB | Qwen3.5-35B-A3B (MoE) | DeepSeek-R1-Distill-Qwen-14B → 32B | — | Sweet spot starts here; everything in this doc behaves. |
-| 64 GB | Qwen3.5-35B-A3B (Q5) | DeepSeek-R1-Distill-Qwen-32B (Q5) | — | Higher quants comfortable. |
-| 96 GB | Qwen3.5-35B-A3B (Q5/Q6) | DeepSeek-R1-Distill-Qwen-32B (Q6) | Qwen3.5-122B-A10B (Q4) | Stretch becomes possible. |
-| 128 GB+ | Qwen3.5-35B-A3B (Q4–Q6) | DeepSeek-R1-Distill-Qwen-32B | Qwen3.5-122B-A10B (Q4–Q6) | The reference picks as written. |
-| 192–256 GB | Qwen3.5-35B-A3B | DeepSeek-R1-Distill-Qwen-32B | Qwen3.5-397B-A17B (Q4) | New top end (Mac Studios primarily). |
+| 16 GB | Qwen3-class 4 B (dense) | DeepSeek-R1-0528-Qwen3-8B (tight) | — | LLM headroom tight; close other apps. No stretch tier. |
+| 24 GB | Qwen3-class 8 B–14 B (dense, tight at 14 B) | DeepSeek-R1-0528-Qwen3-8B | — | First viable tier for "real" reasoning. |
+| 32–48 GB | Qwen3.5-35B-A3B (MoE) | DeepSeek-R1-0528-Qwen3-8B (or 32 B distill for heavier math) | — | Sweet spot starts here; everything in this doc behaves. |
+| 64 GB | Qwen3.5-35B-A3B (Q5) | DeepSeek-R1-0528-Qwen3-8B (Q6/Q8) or 32 B distill (Q5) | — | Higher quants comfortable. |
+| 96 GB | Qwen3.5-35B-A3B (Q5/Q6) | 8 B distill (Q8) or 32 B distill (Q6) | Qwen3.5-122B-A10B (Q4) | Stretch becomes possible. |
+| 128 GB+ | Qwen3.5-35B-A3B (Q4–Q6) | DeepSeek-R1-0528-Qwen3-8B | Qwen3.5-122B-A10B (Q4–Q6) | The reference picks as written. |
+| 192–256 GB | Qwen3.5-35B-A3B | DeepSeek-R1-0528-Qwen3-8B or 32 B distill | Qwen3.5-397B-A17B (Q4) | New top end (Mac Studios primarily). |
 
 Quant suffixes assume MLX repos in [`mlx-community/`](https://huggingface.co/mlx-community) on Hugging Face; substitute the closest existing quant when the exact one isn't published. The [`model-switch.sh`](bin/model-switch.sh) helper has these picks in one place — edit, don't fork.
 
@@ -93,6 +93,8 @@ Documented properly per sub-phase; for now, the rules that apply throughout:
 - **Pre-pull weights** before flight mode: `hf download <repo>` (the old `huggingface-cli` is deprecated as of 2026; `uv tool install huggingface_hub` still installs the new `hf` binary). First-token-after-flight should not wait on the network.
 - **Watch unified-memory pressure**, not free RAM. macOS swaps aggressively before showing low free memory, and swap on an LLM is unusable. `mactop` ([metaspartan/mactop](https://github.com/metaspartan/mactop)) is the live view; [`bin/model-status.sh`](bin/model-status.sh) is the one-shot.
 - **Update mlx-lm every few weeks** (`uv tool upgrade mlx-lm`). New Qwen / DeepSeek releases need fresh architecture support.
+- **LiteLLM (phase 1 onward) pinned by digest, never internet-exposed.** Even on a laptop bound to `127.0.0.1`. Pin a known-good version ≥1.83.7 (CVE-2026-42208 pre-auth SQL injection fixed there; a March 2026 PyPI supply-chain attack pushed malicious 1.82.7/1.82.8). On a laptop the blast radius is small but the discipline is identical to the cloud-track rule.
+- **Honest about what mlx-lm gives up vs. the cloud audition.** No built-in RadixAttention-style prefix cache, no xgrammar-class structured-output framework, no FP8 path on Apple Silicon. For prose editing, occasional code edits, and PDF Q&A the practical impact is unmeasured — possibly small. If you find sustained multi-turn agentic sessions (long Aider conversations, repeated RAG over the same shared prefix) feel materially slower than the same workflow against a cloud SGLang/vLLM endpoint, this is the likely cause. We haven't benchmarked it head-to-head and don't want to overclaim either direction.
 
 ## Helpers
 

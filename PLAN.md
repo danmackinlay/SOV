@@ -54,7 +54,7 @@ Full ADRs are in [`docs/decisions/`](docs/decisions/). One-line summaries:
 |---|---|---|
 | Audition cloud | RunPod primary; vast.ai for cheap phase-0; Lambda for phase-1 scale | Familiarity, fast spin-up, ephemeral URLs built in. Vast.ai is cheaper but has trust caveats. |
 | Inference engine | vLLM primary; SGLang benchmarked at phase 1; Dynamo + NIM documented for DGX migration | vLLM has the broadest ecosystem (Aider, Claude Code, LangChain) and first-class GB300/DGX Station support. SGLang's 2026 numbers may flip this at phase-1 benchmark; see ADR 0002. |
-| User-facing surface | OpenAI-compatible endpoint + Open WebUI; Jan as recommended desktop client | OpenAI compat is the universal interface; Open WebUI is zero-install for collaborators. (Open WebUI's April 2025 license is non-OSI with a 50-user branding clause; acceptable at audition scale, pre-committed to swap to LibreChat at phase 3 if membership crosses the threshold — see ADR 0003.) |
+| User-facing surface | OpenAI-compatible endpoint + LibreChat; Jan as recommended desktop client | OpenAI compat is the universal interface; LibreChat is MIT, MCP-aligned, supports conversation forking. Revised from Open WebUI on 2026-05-12 — see ADR 0003 §Revision. |
 | Auth (audition) | Ephemeral pod URLs + shared API key + runtime cap | Cost-bounded blast radius even if URL leaks. |
 | Orchestration | `docker run` at phase 0; Docker Compose from phase 1 | Compose is the floor for multi-service. Heterogeneous routing via LiteLLM proxy (pinned ≥1.83.7, never internet-exposed — see phase 2). |
 | Models | Qwen3.5-35B-A3B → Qwen3.5-122B-A10B (FP8) → de-censored + reasoning sidecar → DGX | Each phase exercises more of the stack at higher cost; can stop at any phase. |
@@ -93,7 +93,7 @@ Some work doesn't fit the cloud-audition phase numbering but is still under SOV'
 
 ## 4. Phase 0 — stack validation
 
-**Goal:** prove the full stack runs end-to-end on a single GPU with a small model. We are not testing model quality here; we are testing that we can spin up a pod, serve an OpenAI-compatible API, hit it from Open WebUI, hit it from a collaborator's machine, and tear it down with a printable cost.
+**Goal:** prove the full stack runs end-to-end on a single GPU with a small model. We are not testing model quality here; we are testing that we can spin up a pod, serve an OpenAI-compatible API, hit it from LibreChat, hit it from a collaborator's machine, and tear it down with a printable cost.
 
 ### Hardware
 
@@ -110,7 +110,7 @@ Some work doesn't fit the cloud-audition phase numbering but is still under SOV'
 ```
 RunPod pod
   |--> docker run vllm/vllm-openai:v0.20.2 serving Qwen3.5-35B-A3B
-  |--> docker run open-webui/open-webui pointed at vLLM
+  |--> docker run librechat pointed at vLLM (no-registration mode, single pre-seeded admin)
   '--> RunPod proxy URL exposed on a unique random hostname
 ```
 
@@ -126,7 +126,7 @@ When phase 0 is "done", the repo contains:
 - [`phases-cloud/phase-0-stack-validation/launch.sh`](phases-cloud/) — script that:
   - takes a `--max-runtime-hours N` flag with a default of 4 and a hard cap of 24
   - spins up a RunPod pod (via `runpodctl` or the API)
-  - waits for vLLM and Open WebUI to be ready
+  - waits for vLLM and LibreChat to be ready
   - prints the access URL and the shared API key
   - prints the destruction command
   - schedules its own self-destruct at the runtime cap
@@ -140,7 +140,7 @@ A collaborator who has never seen the repo can:
 2. Set their RunPod API key in `.env`
 3. Run `./phases-cloud/phase-0-stack-validation/launch.sh`
 4. Open the printed URL in their browser
-5. Have a conversation with Qwen3.5-35B-A3B in Open WebUI
+5. Have a conversation with Qwen3.5-35B-A3B in LibreChat
 6. Hit the OpenAI-compatible endpoint from `curl` with the printed API key
 7. Walk away and have it auto-destroy at the runtime cap
 
@@ -183,7 +183,7 @@ A collaborator who has never seen the repo can:
 Lambda or RunPod multi-GPU pod
   '--> docker compose up
         |--> vllm/vllm-openai (Qwen3.5-122B-A10B FP8, tensor-parallel across 4-8 GPUs)
-        |--> open-webui (pointed at vLLM)
+        |--> librechat (pointed at vLLM, MCP-aligned, MIT)
         |--> Caddy reverse proxy w/ shared-key auth (nginx acceptable; Caddy
         |    preferred for ~10-line config + automatic TLS when off RunPod proxy)
         '--> [optional] sglang sidecar for benchmarking
@@ -356,7 +356,7 @@ These are real questions we have not yet answered. Record the resolution here wh
 4. **What's the right license for this repo?** Probably MIT or Apache-2.0 to encourage forking by other collectives. Resolve before going public.
 5. **Phase 3 hosting venue (home / office / colo).** Defer until phase 2 results inform reliability requirements.
 6. **NIM evaluation depth at phase 3.** We've decided not to use it as the audition path, but we should at minimum verify it (and now Dynamo 1.0) can serve the same weights when we get to physical hardware. Defer.
-7. **When do we swap Open WebUI for LibreChat?** Trigger: any phase-3 plan with >50 members would cross Open WebUI's April-2025 branding clause. Pre-committed swap to LibreChat (MIT) at that point. See [ADR 0003](docs/decisions/0003-audition-surface-and-auth.md).
+7. ~~**When do we swap Open WebUI for LibreChat?**~~ **Resolved 2026-05-12:** LibreChat adopted as primary from day 1 (was: pre-commit at phase 3 if membership >50). See [ADR 0003 §Revision](docs/decisions/0003-audition-surface-and-auth.md#revision-2026-05-12--librechat-promoted-to-primary).
 
 ---
 
@@ -396,7 +396,7 @@ A phase directory always contains:
 
 ## 11. What happens next
 
-Immediate next step is to **scope phase 0 in detail with Dan**: confirm RunPod account credentials and quotas, decide on `runpodctl` vs. raw API, settle the Open WebUI vs. raw API surface for the first session, and write the launch script. That conversation produces the contents of [`phases-cloud/phase-0-stack-validation/`](phases-cloud/) and triggers the first auditioned run.
+Immediate next step is to **scope phase 0 in detail with Dan**: confirm RunPod account credentials and quotas, decide on `runpodctl` vs. raw API, settle the LibreChat vs. raw API surface for the first session, and write the launch script. That conversation produces the contents of [`phases-cloud/phase-0-stack-validation/`](phases-cloud/) and triggers the first auditioned run.
 
 After phase 0 ships, we recap what we learned, update this plan if anything changed, and scope phase 1 the same way.
 

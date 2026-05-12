@@ -7,7 +7,7 @@
 #
 # Usage:
 #   model-switch.sh small   # Qwen3.5-35B-A3B (daily driver, MoE + thinking + VL)
-#   model-switch.sh math    # DeepSeek-R1-Distill-Qwen-32B (math/proofs)
+#   model-switch.sh math    # DeepSeek-R1-0528-Qwen3-8B (math; ties 235B-Thinking on AIME)
 #   model-switch.sh big     # Qwen3.5-122B-A10B (stretch, 96 GB+ Macs)
 #   model-switch.sh off     # kill everything, don't relaunch
 #   model-switch.sh status  # show what's running, exit
@@ -34,7 +34,7 @@ PID_FILE="${LOG_DIR}/mlx-lm.pid"
 
 declare -A MODELS=(
   [small]="mlx-community/Qwen3.5-35B-A3B-4bit"
-  [math]="mlx-community/DeepSeek-R1-Distill-Qwen-32B-4bit"
+  [math]="mlx-community/DeepSeek-R1-0528-Qwen3-8B-4bit"
   [big]="mlx-community/Qwen3.5-122B-A10B-4bit"
 )
 
