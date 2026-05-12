@@ -27,7 +27,7 @@ These are documented with full reasoning in [`docs/decisions/`](docs/decisions/)
 
 ## Working norms
 
-- **Plans are public.** Every phase has its own directory under [`phases/`](phases/) with a README, scripts, and an exit-criteria checklist. Don't write code without a phase doc to anchor it.
+- **Plans are public.** Every phase has its own directory — cloud-audition phases under [`phases-cloud/`](phases-cloud/), the parallel laptop track under [`phases-apple/`](phases-apple/) — each with a README, scripts, and an exit-criteria checklist. Don't write code without a phase doc to anchor it.
 - **Decisions are durable.** When we make an architectural choice (or revise one), record it as a short ADR in [`docs/decisions/`](docs/decisions/). Format: context → decision → consequences. Keep them under a page.
 - **Scripts are launchable.** Every script that spins up cloud infra prints its destruction command and its cost cap on launch. No surprises on the credit card.
 - **The rationale documents are external.** They live on Dan's blog ([post](https://danmackinlay.name/notebook/aus_sovereign_llm.html), [technical](https://danmackinlay.name/notebook/aus_sovereign_llm_technical.html)) and are the canonical source. SOV doesn't mirror them, to avoid drift.
@@ -37,7 +37,7 @@ These are documented with full reasoning in [`docs/decisions/`](docs/decisions/)
 
 Default workflow:
 1. Read [`PLAN.md`](PLAN.md) to find the current phase and its exit criteria.
-2. Read the corresponding [`phases/phase-N/`](phases/) directory if it exists.
+2. Read the corresponding phase directory under [`phases-cloud/`](phases-cloud/) or [`phases-apple/`](phases-apple/) if it exists.
 3. Ask Dan for any specifics the phase doc doesn't pin down before writing scripts.
 4. Add the new code with a phase-doc update in the same change.
 

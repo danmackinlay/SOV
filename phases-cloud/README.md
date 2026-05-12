@@ -1,13 +1,17 @@
-# Phases
+# Cloud audition track
 
-Each subdirectory here is created when a phase begins, not before. The high-level definition of each phase, exit criteria, and budget lives in [`../PLAN.md`](../PLAN.md). The subdirectory contains the runnable artefacts:
+The main SOV audition arc: rented GPUs, a target model under realistic load, an answer to the "should we buy hardware" question. Master plan lives in [`../PLAN.md`](../PLAN.md) §3–§7; this README is the directory index.
+
+The personal Apple Silicon stack runs as a parallel track at [`../phases-apple/`](../phases-apple/) (rationale: [ADR 0004](../docs/decisions/0004-apple-laptop-personal-track.md)).
+
+## Phase map
+
+Each subdirectory is created when its phase begins, not before. Every phase directory contains:
 
 - `README.md` — runbook for the phase
 - `launch.sh` — entry point for spinning up the audition (with `--max-runtime-hours` cap)
 - `teardown.sh` — explicit destroy
 - Phase-specific assets (Compose files, benchmark scripts, model configs, etc.)
-
-The plan's phase map:
 
 | Directory | What |
 |---|---|

@@ -4,7 +4,7 @@ This document describes the engineering plan for the SOV repo: how we get from "
 
 It is the live plan. Revise it in place when reality diverges; mark superseded sections rather than deleting them so we keep an audit trail.
 
-**Reading order:** [rationale](docs/rationale/) → this plan → individual [phase docs](phases/) as they're created.
+**Reading order:** [rationale](docs/rationale/) → this plan → individual [phase docs](phases-cloud/) as they're created.
 
 ---
 
@@ -64,7 +64,7 @@ Full ADRs are in [`docs/decisions/`](docs/decisions/). One-line summaries:
 
 ## 3. Phased roadmap
 
-Each phase has its own directory under [`phases/phase-N-name/`](phases/) with a `README.md`, scripts, and an exit-criteria checklist. The phase directory is created when the phase begins, not before.
+Each phase has its own directory under [`phases-cloud/phase-N-name/`](phases-cloud/) with a `README.md`, scripts, and an exit-criteria checklist. The phase directory is created when the phase begins, not before.
 
 ### High-level dependency graph
 
@@ -82,6 +82,12 @@ phase 3 (DGX migration)        --> gated on cooperative legal formation
 ```
 
 Phases must be done in order; nothing in phase 1 should require revisiting phase-0 decisions, and so on.
+
+### Parallel tracks
+
+Some work doesn't fit the cloud-audition phase numbering but is still under SOV's umbrella because it shares interface conventions:
+
+- [**`phases-apple/`**](phases-apple/) — Mac-native personal stack on Apple Silicon, mirroring the audition's OpenAI-compatible + LiteLLM interface choices but with mlx-lm and Ollama as backends. Daily use of the laptop track is practice for the cloud audition. Rationale: [ADR 0004](docs/decisions/0004-apple-laptop-personal-track.md); position on Apple Neural Engine: [ADR 0005](docs/decisions/0005-apple-neural-engine.md). The laptop track has its own internal sub-phases (`phase-0` through `phase-4`) which are independent of the audition phases.
 
 ---
 
@@ -114,15 +120,15 @@ No Docker Compose at this phase. Two `docker run` commands and a launch script t
 
 When phase 0 is "done", the repo contains:
 
-- [`phases/phase-0-stack-validation/README.md`](phases/) — runbook
-- [`phases/phase-0-stack-validation/launch.sh`](phases/) — script that:
+- [`phases-cloud/phase-0-stack-validation/README.md`](phases-cloud/) — runbook
+- [`phases-cloud/phase-0-stack-validation/launch.sh`](phases-cloud/) — script that:
   - takes a `--max-runtime-hours N` flag with a default of 4 and a hard cap of 24
   - spins up a RunPod pod (via `runpodctl` or the API)
   - waits for vLLM and Open WebUI to be ready
   - prints the access URL and the shared API key
   - prints the destruction command
   - schedules its own self-destruct at the runtime cap
-- [`phases/phase-0-stack-validation/teardown.sh`](phases/) — explicit destroy command
+- [`phases-cloud/phase-0-stack-validation/teardown.sh`](phases-cloud/) — explicit destroy command
 - A short ADR in [`docs/decisions/`](docs/decisions/) recording any discoveries that reshape later phases (e.g., RunPod startup-time gotchas)
 
 ### Exit criteria
@@ -130,7 +136,7 @@ When phase 0 is "done", the repo contains:
 A collaborator who has never seen the repo can:
 1. Clone it
 2. Set their RunPod API key in `.env`
-3. Run `./phases/phase-0-stack-validation/launch.sh`
+3. Run `./phases-cloud/phase-0-stack-validation/launch.sh`
 4. Open the printed URL in their browser
 5. Have a conversation with Qwen3-30B in Open WebUI
 6. Hit the OpenAI-compatible endpoint from `curl` with the printed API key
@@ -190,21 +196,21 @@ This is the phase where we generate the evidence for or against the hardware pur
 3. **Agentic round-trip** — measure the full latency of one tool-calling cycle (prompt → tool call → tool result → response) on at least one realistic agentic task.
 4. **vLLM vs. SGLang** side-by-side on the same workload. Document any differences > 15%.
 
-Output: a `phases/phase-1-full-audition/benchmarks.md` with results, raw data, and a recommendation.
+Output: a `phases-cloud/phase-1-full-audition/benchmarks.md` with results, raw data, and a recommendation.
 
 ### Deliverables
 
-- [`phases/phase-1-full-audition/README.md`](phases/) — runbook
-- [`phases/phase-1-full-audition/docker-compose.yml`](phases/) — service definitions
-- [`phases/phase-1-full-audition/launch.sh`](phases/) — multi-GPU pod orchestration with cap
-- [`phases/phase-1-full-audition/teardown.sh`](phases/)
-- [`phases/phase-1-full-audition/benchmarks/`](phases/) — scripts that run the benchmarks above and write reproducible results
-- [`phases/phase-1-full-audition/benchmarks.md`](phases/) — written-up findings
+- [`phases-cloud/phase-1-full-audition/README.md`](phases-cloud/) — runbook
+- [`phases-cloud/phase-1-full-audition/docker-compose.yml`](phases-cloud/) — service definitions
+- [`phases-cloud/phase-1-full-audition/launch.sh`](phases-cloud/) — multi-GPU pod orchestration with cap
+- [`phases-cloud/phase-1-full-audition/teardown.sh`](phases-cloud/)
+- [`phases-cloud/phase-1-full-audition/benchmarks/`](phases-cloud/) — scripts that run the benchmarks above and write reproducible results
+- [`phases-cloud/phase-1-full-audition/benchmarks.md`](phases-cloud/) — written-up findings
 - One ADR in [`docs/decisions/`](docs/decisions/) recording vLLM-vs-SGLang outcome
 
 ### Exit criteria
 
-1. The three collaborators have each had at least one extended (60+ minute) work session against the audition stack and written up subjective impressions in `phases/phase-1-full-audition/impressions.md`.
+1. The three collaborators have each had at least one extended (60+ minute) work session against the audition stack and written up subjective impressions in `phases-cloud/phase-1-full-audition/impressions.md`.
 2. Throughput numbers from the benchmark suite are within ±25% of the [technical rationale's predictions](https://danmackinlay.name/notebook/aus_sovereign_llm_technical.html) — discrepancies investigated and explained.
 3. We have a written go/no-go recommendation on phase 2.
 
@@ -231,7 +237,7 @@ This phase has three independent workstreams that can run in parallel.
 Apply abliteration to Qwen3-235B-A22B using [Heretic](https://github.com/p-e-w/heretic) or [llm-abliteration](https://github.com/jim-plus/llm-abliteration). Run on rented 8× H100 for 2–4 hours.
 
 **Deliverables:**
-- [`phases/phase-2-decensor-agentic/abliteration/run.sh`](phases/) — automated pipeline
+- [`phases-cloud/phase-2-decensor-agentic/abliteration/run.sh`](phases-cloud/) — automated pipeline
 - Pre-and-post evaluation against the [Shisa.AI Qwen2 censorship taxonomy](https://shisa.ai/posts/qwen2-chinese-llm-censorship-analysis/) in both English and Chinese, results checked into the repo
 - The abliterated weights themselves stored on… [open question — see §9]
 
@@ -250,7 +256,7 @@ A runnable demo where each collaborator can experience an agent doing real-ish w
 **Default:** Aider as the workhorse POC plus a 50-line custom Python agent that exercises tool calling end-to-end. Claude-Code-in-API-mode is a stretch goal.
 
 **Deliverables:**
-- [`phases/phase-2-decensor-agentic/agentic/`](phases/) — runnable demos and a written walkthrough
+- [`phases-cloud/phase-2-decensor-agentic/agentic/`](phases-cloud/) — runnable demos and a written walkthrough
 - A note on what worked, what frustrated, and how it compares to Claude Code against Anthropic's actual API (the realistic baseline)
 
 **Cost:** development time + a few hours of GPU time for testing.
@@ -267,8 +273,8 @@ LiteLLM presents a single OpenAI-compatible endpoint. Clients pick a model by na
 This sets up the architecture pattern we'd want on the eventual DGX setup: workhorse + sidecar(s).
 
 **Deliverables:**
-- Updated [`docker-compose.yml`](phases/) including LiteLLM and the second model server
-- [`phases/phase-2-decensor-agentic/routing/litellm-config.yaml`](phases/)
+- Updated [`docker-compose.yml`](phases-cloud/) including LiteLLM and the second model server
+- [`phases-cloud/phase-2-decensor-agentic/routing/litellm-config.yaml`](phases-cloud/)
 - A short runbook documenting how to add a third backend
 
 **Cost:** ~1× extra H100-hour per testing session; mostly absorbed in workstream A and B's GPU time.
@@ -360,13 +366,16 @@ SOV/
     decisions/               ADRs (architectural decision records)
     context/                 supplementary context for collaborators and agents
     sessions.md              log of every audition session (created at phase 0)
-  phases/
+  phases-cloud/                cloud-audition track (the main SOV arc)
     phase-0-stack-validation/  created when phase 0 begins
     phase-1-full-audition/     created when phase 1 begins
     phase-2-decensor-agentic/  created when phase 2 begins
     phase-3-dgx-migration/     created when phase 3 is real
+  phases-apple/                parallel track: Mac-native personal stack
+    phase-0/                   mlx-lm + Jan baseline
+    bin/                       model-switch.sh, model-status.sh
   scripts/
-    common/                  shared bash helpers used across phases
+    common/                    shared bash helpers used across tracks
 ```
 
 A phase directory always contains:
@@ -380,6 +389,6 @@ A phase directory always contains:
 
 ## 11. What happens next
 
-Immediate next step is to **scope phase 0 in detail with Dan**: confirm RunPod account credentials and quotas, decide on `runpodctl` vs. raw API, settle the Open WebUI vs. raw API surface for the first session, and write the launch script. That conversation produces the contents of [`phases/phase-0-stack-validation/`](phases/) and triggers the first auditioned run.
+Immediate next step is to **scope phase 0 in detail with Dan**: confirm RunPod account credentials and quotas, decide on `runpodctl` vs. raw API, settle the Open WebUI vs. raw API surface for the first session, and write the launch script. That conversation produces the contents of [`phases-cloud/phase-0-stack-validation/`](phases-cloud/) and triggers the first auditioned run.
 
 After phase 0 ships, we recap what we learned, update this plan if anything changed, and scope phase 1 the same way.

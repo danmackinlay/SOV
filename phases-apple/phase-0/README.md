@@ -1,0 +1,102 @@
+# Apple laptop phase 0 — bare floor
+
+**Goal:** prove that mlx-lm can serve a thinking-class small model on an Apple Silicon Mac and that Jan can talk to it. We are not yet testing routing, RAG, agents, or anything else. One model, one client, one endpoint.
+
+Equivalent in spirit to the main [SOV cloud phase 0](../../phases-cloud/) — same "validate end-to-end with the small model" framing — but on Apple Silicon with no cloud component.
+
+## Prerequisites
+
+- macOS 14+ on Apple Silicon. The `local-small` reference pick (Qwen3-30B-A3B-Thinking) wants ≥ 32 GB unified memory; on smaller machines, substitute per the [RAM-tier sizing table](../README.md#ram-tier-sizing) in the track README. Phase 0 only needs *some* model to work, not the reference one.
+- [`uv`](https://docs.astral.sh/uv/) installed (`brew install uv`).
+- Homebrew + Ollama (`brew install ollama`).
+- Free disk: ≥ 30 GB in `~/.cache/huggingface/` for the small-model weights; budget more if you'll pull `local-math` or `local-big` in later phases.
+
+The commands below use `mlx-community/Qwen3-30B-A3B-Thinking-2507-4bit` as the example model. On a smaller-RAM machine substitute the appropriate pick (e.g. `mlx-community/Qwen3-8B-4bit` on a 24 GB Mac). The flow is identical.
+
+## Install
+
+```bash
+# MLX inference engine
+uv tool install mlx-lm
+
+# Pre-pull the model weights so first-token doesn't wait on the network
+uv tool install huggingface_hub
+huggingface-cli download mlx-community/Qwen3-30B-A3B-Thinking-2507-4bit  # or your tier's pick
+
+# Live system view (optional but recommended)
+brew install mactop
+
+# Jan (chat client)
+# Download the DMG from https://jan.ai and drag to /Applications
+```
+
+If `mlx-community/Qwen3-30B-A3B-Thinking-2507-4bit` isn't the exact current quant name on Hugging Face, search [`mlx-community`](https://huggingface.co/mlx-community) for the latest matching repo and update the alias in [`../bin/model-switch.sh`](../bin/model-switch.sh).
+
+## Launch
+
+```bash
+# Start the mlx-lm server (one model, foreground, port 8080)
+mlx_lm.server \
+  --model mlx-community/Qwen3-30B-A3B-Thinking-2507-4bit \
+  --host 127.0.0.1 \
+  --port 8080
+```
+
+In another terminal, smoke-test the endpoint:
+
+```bash
+curl -s http://127.0.0.1:8080/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "model": "mlx-community/Qwen3-30B-A3B-Thinking-2507-4bit",
+    "messages": [{"role": "user", "content": "Prove that the square root of 2 is irrational."}],
+    "max_tokens": 800
+  }' | jq -r '.choices[0].message.content'
+```
+
+You should see a thinking trace and a proof. Tokens-per-second on a comfortably-provisioned machine (i.e. one with at least ~2× the model's resident size in unified memory) should be in the tens. If it's single digits, check `mactop` for swap pressure — you're likely running with too little headroom and should drop to a smaller-tier model from the [sizing table](../README.md#ram-tier-sizing).
+
+## Configure Jan
+
+1. Open Jan.
+2. Settings → Model Providers → Add new (OpenAI-compatible):
+   - **Name:** `Local MLX`
+   - **API base:** `http://127.0.0.1:8080/v1`
+   - **API key:** anything; mlx-lm doesn't check.
+3. Add a model entry with the same id you launched mlx-lm.server with.
+4. Start a thread; pick that model.
+
+Talk to it. Confirm it answers, thinks visibly (in `<think>` tags or Jan's reasoning panel, depending on Jan version), and feels responsive.
+
+## Exit criteria
+
+Phase 0 is done when **all** of these are true:
+
+1. A conversation in Jan against the local model completes end-to-end with no errors.
+2. Tokens-per-second on a non-trivial prompt is in the tens, not single digits, on a comfortably-provisioned machine. (On a tight-tier machine, drop the bar to "acceptable for your patience and adjust the model picks down.")
+3. `mactop` shows no swap during a conversation.
+4. The weights are on disk and the model loads from local cache (verify by airplane-mode + restart).
+5. A one-line answer is written to [`impressions.md`](impressions.md) on whether `local-small` feels useful for prose editing tasks. (Not "is it as good as Claude" — is it good enough to be the flight-mode fallback?)
+
+## Budget
+
+| Item | Cost |
+|---|---|
+| Weights download (~17 GB for the reference pick; less for smaller-tier picks) | bandwidth + ~30 min |
+| Active "is this useful?" testing | half a day |
+| Phase 0 dollar cost | $0 |
+
+The cost cap on the laptop track is thermal and battery, not currency. Running `local-small` on battery for an hour is fine on most tiers; running `local-big` (phase 3) on battery is never a good idea.
+
+## What's deliberately out of scope here
+
+- LiteLLM proxy → phase 1.
+- Aider against a local model → phase 1.
+- RAG, embeddings, PDFs → phase 2.
+- Anything visual (Draw Things, ComfyUI, vision models) → phase 3 / 4.
+- The `model-switch.sh` and `model-status.sh` helpers work already, but phase 0 doesn't strictly need them — running one model from one terminal is the point.
+
+## Open questions for phase 0
+
+- **Thinking-mode vs. instruct-mode of Qwen3-30B-A3B.** Phase 0 uses the Thinking variant on the bet that explicit reasoning will be more useful than terseness for the prose/math workload. If it's painfully slow on the laptop or the trace is noisy, swap to the `Instruct` variant of whatever sized Qwen3 you're using and document.
+- **Should Jan be configured to filter thinking traces from the visible reply?** Default: keep them visible during phase 0 so we can see what the model is doing. Revisit at phase 1.

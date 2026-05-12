@@ -7,3 +7,5 @@ Numbered ADRs documenting the *why* behind architectural choices in SOV. Format 
 | [0001](0001-cloud-providers.md) | Cloud GPU providers for the audition | Accepted |
 | [0002](0002-inference-engine.md) | Inference engine: vLLM primary | Accepted |
 | [0003](0003-audition-surface-and-auth.md) | Audition surface and ephemeral auth model | Accepted |
+| [0004](0004-apple-laptop-personal-track.md) | Apple laptop as a parallel personal track | Accepted |
+| [0005](0005-apple-neural-engine.md) | Apple Neural Engine: not a target for the laptop track | Accepted |
