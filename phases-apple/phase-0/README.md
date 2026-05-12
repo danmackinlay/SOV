@@ -55,11 +55,36 @@ curl -s http://127.0.0.1:8080/v1/chat/completions \
   -d '{
     "model": "mlx-community/Qwen3.5-35B-A3B-4bit",
     "messages": [{"role": "user", "content": "Prove that the square root of 2 is irrational."}],
-    "max_tokens": 800
-  }' | jq -r '.choices[0].message.content'
+    "max_tokens": 4000
+  }' | jq -r '.choices[0].message | "=== reasoning ===\n" + (.reasoning // "") + "\n\n=== answer ===\n" + (.content // "")'
 ```
 
-You should see a thinking trace and a proof. Tokens-per-second on a comfortably-provisioned machine (i.e. one with at least ~2× the model's resident size in unified memory) should be in the tens. If it's single digits, check `mactop` for swap pressure — you're likely running with too little headroom and should drop to a smaller-tier model from the [sizing table](../README.md#ram-tier-sizing).
+You should see a multi-paragraph thinking trace followed by a proof. Tokens-per-second on a comfortably-provisioned machine (i.e. one with at least ~2× the model's resident size in unified memory) should be in the tens. If it's single digits, check `mactop` for swap pressure — you're likely running with too little headroom and should drop to a smaller-tier model from the [sizing table](../README.md#ram-tier-sizing).
+
+### Response-shape gotchas
+
+mlx-lm.server is OpenAI-*compatible*, not OpenAI-*identical* — two quirks worth knowing before they bite:
+
+1. **Thinking traces land in a separate `reasoning` field** (not the OpenAI-standard `reasoning_content`). If you naively pull `.choices[0].message.content` from a thinking model's response and the model spent its whole token budget reasoning, you'll get an empty string. The jq filter above unions both fields; Jan's reasoning panel reads them automatically.
+2. **Thinking-mode models need bigger `max_tokens`.** Qwen3.5 (and Qwen3 `*-Thinking`, and DeepSeek-R1-class models) think by default. A few-hundred-token cap that worked for non-thinking models will get truncated mid-thought; budget 2000–4000+ for non-trivial prompts.
+
+### Disabling thinking per request
+
+When you want a terse reply (one-line factual queries, structured output, agentic tool-calls), disable thinking via the chat-template kwarg — verified for mlx-lm.server with Qwen3.5:
+
+```bash
+curl -s http://127.0.0.1:8080/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "model": "mlx-community/Qwen3.5-35B-A3B-4bit",
+    "messages": [{"role": "user", "content": "What is 2+2? Answer briefly."}],
+    "max_tokens": 200,
+    "chat_template_kwargs": {"enable_thinking": false}
+  }' | jq -r '.choices[0].message.content'
+# -> "4"
+```
+
+The key is `chat_template_kwargs` (note the `_kwargs` suffix — `chat_template_args` is silently ignored). The same flag works for Qwen3, Qwen3-Next, and the Qwen3.5 family; DeepSeek-R1-class models use a different mechanism (their template doesn't expose a disable-thinking switch — for those, just live with the trace or pick a non-reasoning model).
 
 ## Configure Jan
 
@@ -103,5 +128,5 @@ The cost cap on the laptop track is thermal and battery, not currency. Running `
 
 ## Open questions for phase 0
 
-- **Thinking-mode vs. instruct-mode.** Phase 0 uses a thinking-by-default variant on the bet that explicit reasoning will be more useful than terseness for the prose/math workload. (Qwen3.5 thinks by default; older Qwen3 had explicit `-Thinking` vs `-Instruct` variants.) If it's painfully slow on the laptop or the trace is noisy, swap to a non-thinking variant or disable thinking at request time and document.
+- **Thinking-mode vs. instruct-mode.** Phase 0 uses a thinking-by-default variant on the bet that explicit reasoning will be more useful than terseness for the prose/math workload. (Qwen3.5 thinks by default; older Qwen3 had explicit `-Thinking` vs `-Instruct` variants.) If it's painfully slow on the laptop or the trace is noisy, disable thinking at request time via `chat_template_kwargs: {"enable_thinking": false}` (see [Response-shape gotchas](#response-shape-gotchas) above) or swap to a non-thinking model.
 - **Should Jan be configured to filter thinking traces from the visible reply?** Default: keep them visible during phase 0 so we can see what the model is doing. Revisit at phase 1.
