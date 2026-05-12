@@ -134,26 +134,33 @@ All three aliases point at the same port 8080 because `model-switch.sh` only eve
 Launch the proxy (from the repo root — all SOV commands run from there, per the [working-directory rule](../README.md#operational-discipline)):
 
 ```bash
-litellm --config phases-apple/phase-1/litellm-config.yaml --host 127.0.0.1 --port 4000
+./phases-apple/bin/litellm-start.sh
 ```
 
-You now have an OpenAI-compatible endpoint at `http://127.0.0.1:4000/v1` that knows three model names.
+You now have an OpenAI-compatible endpoint at `http://127.0.0.1:4000/v1` that knows three model names. The wrapper handles `--config`, `--host 127.0.0.1`, and the port default; extra args pass through.
 
-**Security: LiteLLM defaults to `--host 0.0.0.0` (all interfaces), exposing your proxy to anyone on the same wifi.** We defend in two layers:
+**Why a wrapper and not just `litellm --config ... --host 127.0.0.1 --port 4000`?** Two reasons:
 
-1. **Env-var default via direnv** — [`phases-apple/.envrc`](../.envrc) sets `HOST=127.0.0.1`, which LiteLLM reads via its `envvar="HOST"` Click option. Any `litellm` invocation with cwd anywhere under `phases-apple/` inherits the safe bind automatically. **From the repo root**, this `.envrc` is *not* loaded; mirror the export in your `.envrc.local` for the same protection: `export HOST=127.0.0.1`.
-2. **Explicit `--host 127.0.0.1` on the CLI** — overrides any env-var state, works regardless of cwd, self-documents in the command. The canonical command above keeps it for clarity; it's redundant with the env var when the env var is set, but free to leave in.
+1. **LiteLLM defaults to `--host 0.0.0.0` (all interfaces), which on a wifi-connected laptop exposes the proxy and the model behind it to anyone on the LAN.** A direct CLI invocation that forgets `--host 127.0.0.1` is a foot-gun. The wrapper makes the safe default the easy default.
+2. **LiteLLM also reads an unscoped `HOST` env var** as the `--host` fallback (via its `envvar="HOST"` Click option). Exporting `HOST=127.0.0.1` repo-wide via direnv would collide with shells, ssh wrappers, and generic web tooling that all touch `HOST`. The wrapper scopes the env var to the litellm subprocess only (single-command prefix, not an export), and also passes `--host 127.0.0.1` explicitly as belt-and-braces.
 
-There is no YAML-config equivalent — `--host` is a CLI/env var only.
+There is no YAML-config equivalent — host binding lives in CLI/env-var space only.
 
-Sanity-check the bind:
+Sanity-check the bind after launch:
 
 ```bash
 lsof -nP -iTCP:4000 -sTCP:LISTEN
-# Expect a single line with "127.0.0.1:4000". If it shows "*:4000" you're
-# on 0.0.0.0 — kill the proxy and restart with --host 127.0.0.1 (or fix
-# your .envrc.local).
+# Expect a single line with "127.0.0.1:4000". If it shows "*:4000" the
+# wrapper got bypassed somehow — debug.
 ```
+
+If you need to launch directly without the wrapper (one-off testing, a different cwd, a one-shot port change), the explicit form is:
+
+```bash
+litellm --config phases-apple/phase-1/litellm-config.yaml --host 127.0.0.1 --port 4000
+```
+
+Remembering `--host 127.0.0.1` is the load-bearing discipline in that form.
 
 (From [ADR 0006](../../docs/decisions/0006-secret-handling.md) and the [LiteLLM CVE history](../README.md#operational-discipline): pin LiteLLM ≥ 1.83.7 by digest, never internet-exposed.)
 

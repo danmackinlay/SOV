@@ -5,18 +5,22 @@
 # via direnv (`os.environ/ANTHROPIC_API_KEY`), so this file stays
 # committable.
 #
-# Run from the repo root.
+# Canonical launch (from the repo root):
+#
+#   ./phases-apple/bin/litellm-start.sh
+#
+# That wrapper scopes HOST=127.0.0.1 to the litellm subprocess and
+# passes --host 127.0.0.1 as belt-and-braces. The direct form below
+# works too if you need a one-off; remembering --host is load-bearing.
 #
 #   litellm --config phases-apple/phase-1/litellm-config.yaml \
 #           --host 127.0.0.1 --port 4000
 #
-# Why --host 127.0.0.1: LiteLLM defaults to 0.0.0.0 (all interfaces),
-# which would expose the proxy to anyone on the same wifi. The
-# committed phases-apple/.envrc sets HOST=127.0.0.1 via direnv, which
-# LiteLLM reads via its `envvar="HOST"` Click option, so cwd under
-# phases-apple/ is automatically safe. At repo-root cwd direnv loads
-# only the root .envrc, so we keep --host on the canonical CLI for
-# belt-and-braces. There is no YAML-config equivalent for host binding.
+# Why we don't export HOST in the project .envrc: LiteLLM's --host
+# Click option reads an unscoped HOST env var as its default, but HOST
+# is also touched by shells, ssh wrappers, and generic web tooling.
+# Subprocess-scoped via the wrapper is the safe way; project-wide
+# export would collide. There is no YAML-config equivalent.
 #
 # All three local-* aliases point at the same port 8080. bin/model-switch.sh
 # is the thing that controls which actual model is loaded there; this proxy
