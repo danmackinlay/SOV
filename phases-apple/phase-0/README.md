@@ -6,12 +6,14 @@ Equivalent in spirit to the main [SOV cloud phase 0](../../phases-cloud/) — sa
 
 ## Prerequisites
 
-- macOS 14+ on Apple Silicon. The `local-small` reference pick (Qwen3-30B-A3B-Thinking) wants ≥ 32 GB unified memory; on smaller machines, substitute per the [RAM-tier sizing table](../README.md#ram-tier-sizing) in the track README. Phase 0 only needs *some* model to work, not the reference one.
+- macOS 14+ on Apple Silicon. The `local-small` reference pick (Qwen3.5-35B-A3B) wants ≥ 32 GB unified memory; on smaller machines, substitute per the [RAM-tier sizing table](../README.md#ram-tier-sizing) in the track README. Phase 0 only needs *some* model to work, not the reference one.
 - [`uv`](https://docs.astral.sh/uv/) installed (`brew install uv`).
 - Homebrew + Ollama (`brew install ollama`).
 - Free disk: ≥ 30 GB in `~/.cache/huggingface/` for the small-model weights; budget more if you'll pull `local-math` or `local-big` in later phases.
 
-The commands below use `mlx-community/Qwen3-30B-A3B-Thinking-2507-4bit` as the example model. On a smaller-RAM machine substitute the appropriate pick (e.g. `mlx-community/Qwen3-8B-4bit` on a 24 GB Mac). The flow is identical.
+The commands below use `mlx-community/Qwen3.5-35B-A3B-4bit` as the example model. On a smaller-RAM machine substitute the appropriate pick (e.g. an 8 B-class Qwen3 quant on a 24 GB Mac). The flow is identical.
+
+Before starting, glance at the [freshness audit](../README.md#freshness-audit) in the track README. Model names rot fast; the example below was current at 2026-05-12, and the canonical place to check is [mlx-community](https://huggingface.co/mlx-community).
 
 ## Install
 
@@ -19,9 +21,12 @@ The commands below use `mlx-community/Qwen3-30B-A3B-Thinking-2507-4bit` as the e
 # MLX inference engine
 uv tool install mlx-lm
 
-# Pre-pull the model weights so first-token doesn't wait on the network
+# Hugging Face CLI — installs the new `hf` binary (`huggingface-cli` was
+# deprecated in 2026 and is now a non-functional warning shim).
 uv tool install huggingface_hub
-huggingface-cli download mlx-community/Qwen3-30B-A3B-Thinking-2507-4bit  # or your tier's pick
+
+# Pre-pull the model weights so first-token doesn't wait on the network
+hf download mlx-community/Qwen3.5-35B-A3B-4bit  # or your tier's pick
 
 # Live system view (optional but recommended)
 brew install mactop
@@ -30,14 +35,14 @@ brew install mactop
 # Download the DMG from https://jan.ai and drag to /Applications
 ```
 
-If `mlx-community/Qwen3-30B-A3B-Thinking-2507-4bit` isn't the exact current quant name on Hugging Face, search [`mlx-community`](https://huggingface.co/mlx-community) for the latest matching repo and update the alias in [`../bin/model-switch.sh`](../bin/model-switch.sh).
+If `mlx-community/Qwen3.5-35B-A3B-4bit` isn't the exact current quant name on Hugging Face, search [`mlx-community`](https://huggingface.co/mlx-community) for the latest matching repo and update the alias in [`../bin/model-switch.sh`](../bin/model-switch.sh).
 
 ## Launch
 
 ```bash
 # Start the mlx-lm server (one model, foreground, port 8080)
 mlx_lm.server \
-  --model mlx-community/Qwen3-30B-A3B-Thinking-2507-4bit \
+  --model mlx-community/Qwen3.5-35B-A3B-4bit \
   --host 127.0.0.1 \
   --port 8080
 ```
@@ -48,7 +53,7 @@ In another terminal, smoke-test the endpoint:
 curl -s http://127.0.0.1:8080/v1/chat/completions \
   -H 'Content-Type: application/json' \
   -d '{
-    "model": "mlx-community/Qwen3-30B-A3B-Thinking-2507-4bit",
+    "model": "mlx-community/Qwen3.5-35B-A3B-4bit",
     "messages": [{"role": "user", "content": "Prove that the square root of 2 is irrational."}],
     "max_tokens": 800
   }' | jq -r '.choices[0].message.content'
@@ -82,7 +87,7 @@ Phase 0 is done when **all** of these are true:
 
 | Item | Cost |
 |---|---|
-| Weights download (~17 GB for the reference pick; less for smaller-tier picks) | bandwidth + ~30 min |
+| Weights download (~23 GB for the reference pick; less for smaller-tier picks) | bandwidth + ~30 min |
 | Active "is this useful?" testing | half a day |
 | Phase 0 dollar cost | $0 |
 
@@ -98,5 +103,5 @@ The cost cap on the laptop track is thermal and battery, not currency. Running `
 
 ## Open questions for phase 0
 
-- **Thinking-mode vs. instruct-mode of Qwen3-30B-A3B.** Phase 0 uses the Thinking variant on the bet that explicit reasoning will be more useful than terseness for the prose/math workload. If it's painfully slow on the laptop or the trace is noisy, swap to the `Instruct` variant of whatever sized Qwen3 you're using and document.
+- **Thinking-mode vs. instruct-mode.** Phase 0 uses a thinking-by-default variant on the bet that explicit reasoning will be more useful than terseness for the prose/math workload. (Qwen3.5 thinks by default; older Qwen3 had explicit `-Thinking` vs `-Instruct` variants.) If it's painfully slow on the laptop or the trace is noisy, swap to a non-thinking variant or disable thinking at request time and document.
 - **Should Jan be configured to filter thinking traces from the visible reply?** Default: keep them visible during phase 0 so we can see what the model is doing. Revisit at phase 1.

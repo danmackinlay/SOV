@@ -34,7 +34,7 @@ Image generation (Draw Things, ComfyUI) and audio generation (Stable Audio Open,
 | Editor agent | Aider | `uv tool install aider-chat` | Diff-based edits work on local models; prose-friendly |
 | RAG | AnythingLLM | DMG from [anythingllm.com](https://anythingllm.com) | Desktop app, points at LiteLLM, manages PDF workspaces |
 | PDF → markdown | Marker | `uv tool install marker-pdf` | Math/table-aware; fast on Apple Silicon |
-| Vision/OCR | Qwen2.5-VL-7B via mlx-lm | (pulled on demand) | Ad-hoc image-to-text; Marker has its own OCR |
+| Vision/OCR | Qwen3-VL-8B via mlx-lm (or rely on Qwen3.5 daily driver's native VL) | (pulled on demand) | Ad-hoc image-to-text; Marker has its own OCR |
 | Image gen | Draw Things | App Store | Mac-native sweet spot ([rationale](https://danmackinlay.name/notebook/image_ai_clients.html#draw-things)) |
 | Image gen (power) | ComfyUI + ComfyUI-MLX + ComfyUI-GGUF | `uv venv` + `uv pip install` | Graph-level control; GGUF quants help on lower-RAM Macs |
 | Audio gen | Stable Audio Open via `stable-audio-tools` | Deferred | Low priority ([context](https://danmackinlay.name/notebook/nn_generative_audio.html)) |
@@ -43,11 +43,11 @@ Image generation (Draw Things, ComfyUI) and audio generation (Stable Audio Open,
 
 Three resident-on-disk aliases, math-reasoning-prioritised. **The picks below are written for a high-RAM machine (96 GB+) and should be tuned to your hardware** — see [RAM-tier sizing](#ram-tier-sizing) below, and edit [`bin/model-switch.sh`](bin/model-switch.sh) to match. The shape of the stack (three aliases, MoE for daily driver, dense for math, stretch for occasional heavy reasoning) holds across the range.
 
-| Alias | Reference pick (96 GB+) | Quant | Resident | Use |
+| Alias | Reference pick (96 GB+, as of 2026-05) | Quant | Resident | Use |
 |---|---|---|---|---|
-| `local-small` | [Qwen3-30B-A3B-Thinking-2507](https://huggingface.co/Qwen/Qwen3-30B-A3B-Thinking-2507) (MoE, 3 B active) | MLX 4-bit | ~17 GB | Daily driver. Matches SOV phase 0. |
-| `local-math` | [DeepSeek-R1-Distill-Qwen-32B](https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-32B) | MLX 4-bit | ~19 GB | Mathematics, proofs, formal reasoning. |
-| `local-big` | [Qwen3-235B-A22B-Thinking-2507](https://huggingface.co/Qwen/Qwen3-235B-A22B-Thinking-2507) (MoE, 22 B active) | MLX 3-bit | ~95–105 GB | Stretch model. Matches SOV phase 1. |
+| `local-small` | [Qwen3.5-35B-A3B](https://huggingface.co/Qwen/Qwen3.5-35B-A3B) (MoE, 3 B active; thinking-by-default, natively VL) | MLX 4-bit | ~23 GB | Daily driver. Successor to Qwen3-30B-A3B (the SOV cloud phase-0 model). |
+| `local-math` | [DeepSeek-R1-Distill-Qwen-32B](https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-32B) | MLX 4-bit | ~19 GB | Mathematics, proofs, formal reasoning. (DeepSeek-Math-V2 is the open-weight math frontier as of late 2025 but is 685 B and has no MLX port; this is the practical small-model pick.) |
+| `local-big` | [Qwen3.5-122B-A10B](https://huggingface.co/Qwen/Qwen3.5-122B-A10B) (MoE, 10 B active) | MLX 4-bit | ~65 GB | Stretch model. Smaller and faster than Qwen3-235B-A22B at comparable quality; the new sweet spot for 96 GB+ Macs. |
 
 Add `anthropic-claude` and `anthropic-haiku` to the same LiteLLM config when you want online cloud routing.
 
@@ -57,14 +57,17 @@ Apple Silicon Macs span 16 GB to 192 GB+ of unified memory; the right pick per a
 
 | Unified RAM | `local-small` | `local-math` | `local-big` | Notes |
 |---|---|---|---|---|
-| 16 GB | Qwen3-4B-Thinking | — | — | LLM headroom is tight; close other apps. No math/stretch tier. |
-| 24 GB | Qwen3-8B or Qwen3-14B-Thinking (tight) | DeepSeek-R1-Distill-Qwen-7B | — | First viable tier for "real" reasoning. |
-| 32–48 GB | Qwen3-30B-A3B-Thinking (MoE) | DeepSeek-R1-Distill-Qwen-14B → 32B | — | Sweet spot starts here; everything in this doc behaves. |
-| 64 GB | Qwen3-30B-A3B-Thinking (Q5) | DeepSeek-R1-Distill-Qwen-32B (Q5) | — | Higher quants comfortable. |
-| 96 GB | Qwen3-30B-A3B-Thinking (Q5/Q6) | DeepSeek-R1-Distill-Qwen-32B (Q6) | Qwen3-235B-A22B-Thinking (Q2/Q3, tight) | Stretch becomes possible. |
-| 128 GB+ | Qwen3-30B-A3B-Thinking (Q4–Q6) | DeepSeek-R1-Distill-Qwen-32B (Q4–Q6) | Qwen3-235B-A22B-Thinking (Q3) | The reference picks as written. |
+| 16 GB | Qwen3-class 4 B (dense) | — | — | LLM headroom tight; close other apps. No math/stretch tier. |
+| 24 GB | Qwen3-class 8 B–14 B (dense, tight at 14 B) | DeepSeek-R1-Distill-Qwen-7B | — | First viable tier for "real" reasoning. |
+| 32–48 GB | Qwen3.5-35B-A3B (MoE) | DeepSeek-R1-Distill-Qwen-14B → 32B | — | Sweet spot starts here; everything in this doc behaves. |
+| 64 GB | Qwen3.5-35B-A3B (Q5) | DeepSeek-R1-Distill-Qwen-32B (Q5) | — | Higher quants comfortable. |
+| 96 GB | Qwen3.5-35B-A3B (Q5/Q6) | DeepSeek-R1-Distill-Qwen-32B (Q6) | Qwen3.5-122B-A10B (Q4) | Stretch becomes possible. |
+| 128 GB+ | Qwen3.5-35B-A3B (Q4–Q6) | DeepSeek-R1-Distill-Qwen-32B | Qwen3.5-122B-A10B (Q4–Q6) | The reference picks as written. |
+| 192–256 GB | Qwen3.5-35B-A3B | DeepSeek-R1-Distill-Qwen-32B | Qwen3.5-397B-A17B (Q4) | New top end (Mac Studios primarily). |
 
-Quant suffixes assume MLX repos in [`mlx-community/`](https://huggingface.co/mlx-community) on Hugging Face; substitute the closest existing quant when the exact one isn't published. The model-switch helper has these picks in one place — edit, don't fork.
+Quant suffixes assume MLX repos in [`mlx-community/`](https://huggingface.co/mlx-community) on Hugging Face; substitute the closest existing quant when the exact one isn't published. The [`model-switch.sh`](bin/model-switch.sh) helper has these picks in one place — edit, don't fork.
+
+> **Model picks rot fast.** This table reflects May 2026. Before bootstrapping a fresh machine, re-check [mlx-community](https://huggingface.co/mlx-community), [Qwen](https://huggingface.co/Qwen) and [deepseek-ai](https://huggingface.co/deepseek-ai) for newer releases. The shape (MoE daily + dense math + larger-MoE stretch) is more durable than the specific repo names; substitute generation-for-generation as the families move.
 
 ## Sub-phases
 
@@ -85,8 +88,8 @@ Documented properly per sub-phase; for now, the rules that apply throughout:
 - **One MLX model at a time.** `mlx_lm.server` is one model per process. Use [`bin/model-switch.sh`](bin/) to swap. Don't leave two big models loaded "just in case."
 - **Ollama auto-evicts** with `OLLAMA_KEEP_ALIVE=15m`. Embedding model gets pulled on demand and freed shortly after.
 - **Don't run Draw Things or ComfyUI alongside `local-big`.** GPU contention will stall both. Phase 4 documents the cohabitation rules.
-- **Pre-pull weights** before flight mode: `huggingface-cli download <repo>`. First-token-after-flight should not wait on the network.
-- **Watch unified-memory pressure**, not free RAM. macOS swaps aggressively before showing low free memory, and swap on an LLM is unusable. `mactop` is the live view; [`bin/model-status.sh`](bin/) is the one-shot.
+- **Pre-pull weights** before flight mode: `hf download <repo>` (the old `huggingface-cli` is deprecated as of 2026; `uv tool install huggingface_hub` still installs the new `hf` binary). First-token-after-flight should not wait on the network.
+- **Watch unified-memory pressure**, not free RAM. macOS swaps aggressively before showing low free memory, and swap on an LLM is unusable. `mactop` ([metaspartan/mactop](https://github.com/metaspartan/mactop)) is the live view; [`bin/model-status.sh`](bin/model-status.sh) is the one-shot.
 - **Update mlx-lm every few weeks** (`uv tool upgrade mlx-lm`). New Qwen / DeepSeek releases need fresh architecture support.
 
 ## Helpers
@@ -101,3 +104,27 @@ Documented properly per sub-phase; for now, the rules that apply throughout:
 - **MCP-based RAG inside Jan vs. dedicated AnythingLLM.** Phase 2 uses AnythingLLM for time-to-working. A later phase may swap to a Zotero MCP server feeding Jan directly, which is more SOV-spirit (composable parts). Decision deferred to phase-2 retro.
 - **opencode adoption.** Phase 4 scopes it as an Aider-alternative experiment. If it works well on `local-small`, may promote it; if it's too token-hungry for 30B-class models, stays an experiment.
 - **Cloud routing through LiteLLM.** Phase 1 wires Anthropic into LiteLLM as `anthropic-claude`. Flight-mode behaviour: model alias errors out cleanly if upstream unreachable, the local aliases keep working.
+- **Embedding model upgrade.** Phase 2 uses the existing `mxbai-embed-large` via Ollama, but that model's Ollama distribution has been frozen at v1 since 2024 — Mixedbread's 2026 flagship (Wholembed v3) is hosted-only. For an open-weight upgrade path the field has moved to [Qwen3-Embedding](https://huggingface.co/Qwen) and Jina v5. Re-evaluate at phase 2 if retrieval quality is the bottleneck.
+
+## Freshness audit
+
+This page dates fast — model names, CLI verbs and node-pack repos churn. **Before bootstrapping a new machine, re-verify these upstream pages**; they are the canonical sources:
+
+| Layer | Re-verify at |
+|---|---|
+| MLX inference | [mlx-lm/SERVER.md](https://github.com/ml-explore/mlx-lm/blob/main/mlx_lm/SERVER.md) |
+| MLX model quants | [huggingface.co/mlx-community](https://huggingface.co/mlx-community) (sort by downloads) |
+| Frontier open models | [huggingface.co/Qwen](https://huggingface.co/Qwen) · [huggingface.co/deepseek-ai](https://huggingface.co/deepseek-ai) |
+| HF CLI | [huggingface_hub CLI guide](https://huggingface.co/docs/huggingface_hub/guides/cli) — `hf` (not `huggingface-cli`) since 2026 |
+| Ollama | [docs.ollama.com](https://docs.ollama.com/faq) |
+| LiteLLM | [docs.litellm.ai/docs/proxy/quick_start](https://docs.litellm.ai/docs/proxy/quick_start) |
+| Jan | [janhq/jan](https://github.com/janhq/jan) |
+| AnythingLLM | [docs.anythingllm.com](https://docs.anythingllm.com/installation-desktop/macos) |
+| Aider | [aider.chat/docs/llms/openai-compat.html](https://aider.chat/docs/llms/openai-compat.html) |
+| opencode | [github.com/sst/opencode](https://github.com/sst/opencode) |
+| Draw Things | [drawthings.ai](https://drawthings.ai) |
+| ComfyUI + node packs | [comfyanonymous/ComfyUI](https://github.com/comfyanonymous/ComfyUI) · [city96/ComfyUI-GGUF](https://github.com/city96/ComfyUI-GGUF) |
+
+When something on this list goes stale, fix it in place and bump a "last freshness audit" note here so the next bootstrap doesn't repeat the same hunt.
+
+**Last freshness audit:** 2026-05-12.

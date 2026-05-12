@@ -6,9 +6,9 @@
 # for the /v1/models endpoint to respond before returning.
 #
 # Usage:
-#   model-switch.sh small   # Qwen3-30B-A3B-Thinking-2507 (daily driver)
+#   model-switch.sh small   # Qwen3.5-35B-A3B (daily driver, MoE + thinking + VL)
 #   model-switch.sh math    # DeepSeek-R1-Distill-Qwen-32B (math/proofs)
-#   model-switch.sh big     # Qwen3-235B-A22B-Thinking-2507 (stretch)
+#   model-switch.sh big     # Qwen3.5-122B-A10B (stretch, 96 GB+ Macs)
 #   model-switch.sh off     # kill everything, don't relaunch
 #   model-switch.sh status  # show what's running, exit
 #
@@ -17,10 +17,12 @@
 # which actual model serves them.
 #
 # The MODELS map below is the only thing to edit when tuning the stack to
-# your hardware. Defaults are sized for 96 GB+ unified memory; on smaller
-# Macs drop each row to the picks in the RAM-tier sizing table at
-# ../README.md#ram-tier-sizing. Keep the alias names (small/math/big) so
-# the LiteLLM config and muscle memory carry over.
+# your hardware. Defaults are sized for 96 GB+ unified memory as of
+# 2026-05-12; on smaller Macs drop each row to the picks in the RAM-tier
+# sizing table at ../README.md#ram-tier-sizing. Model names rot fast —
+# re-check huggingface.co/mlx-community before bootstrapping a fresh
+# machine. Keep the alias names (small/math/big) so the LiteLLM config
+# and muscle memory carry over.
 
 set -euo pipefail
 
@@ -31,9 +33,9 @@ LOG_FILE="${LOG_DIR}/mlx-lm.log"
 PID_FILE="${LOG_DIR}/mlx-lm.pid"
 
 declare -A MODELS=(
-  [small]="mlx-community/Qwen3-30B-A3B-Thinking-2507-4bit"
+  [small]="mlx-community/Qwen3.5-35B-A3B-4bit"
   [math]="mlx-community/DeepSeek-R1-Distill-Qwen-32B-4bit"
-  [big]="mlx-community/Qwen3-235B-A22B-Thinking-2507-3bit"
+  [big]="mlx-community/Qwen3.5-122B-A10B-4bit"
 )
 
 usage() {
