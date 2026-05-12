@@ -103,6 +103,23 @@ Documented properly per sub-phase; for now, the rules that apply throughout:
 | [`bin/model-switch.sh`](bin/model-switch.sh) | Kill the running mlx-lm.server, launch a new one by alias, wait for health |
 | [`bin/model-status.sh`](bin/model-status.sh) | One-shot summary: Ollama, MLX process, memory pressure, HF cache disk |
 
+## Cleanup & disk management
+
+The Hugging Face cache at `~/.cache/huggingface/` accumulates relentlessly — every `hf download` lands a new revision, MoE weight shards are big, nothing is ever auto-removed. Budget on disk hygiene every few weeks.
+
+The relevant `hf` subcommands (current as of 2026; the old `huggingface-cli` aliases are deprecated):
+
+| Command | Job |
+|---|---|
+| `hf cache ls` | List cached repos with sizes; the "largest repos" block in [`bin/model-status.sh`](bin/model-status.sh) is a five-row version of this. |
+| `hf cache rm <repo>` | Remove a specific cached repo. Example: `hf cache rm mlx-community/Qwen3-30B-A3B-Thinking-2507-4bit` (the model you'd evict after the Qwen3.5 swap). |
+| `hf cache prune` | Remove detached revisions — orphaned blobs left behind when a repo updated and the new revision replaced the old. Safe by default; doesn't touch current revisions. Run this monthly. |
+| `hf cache verify <repo>` | Sanity-check checksums for one repo. Useful if you suspect a partial download. |
+
+**Don't `rm` a model that `mlx_lm.server` is currently serving.** The process holds open file handles via `mmap`; on macOS the rm "succeeds" but the disk space isn't reclaimed until the process exits, and the next load may fail or read junk. Use `model-switch.sh off` first, then evict.
+
+To move the cache off the boot volume (large models on an external SSD, say), set `HF_HOME` in your `.envrc.local` — direnv will export it to every `hf` and `mlx_lm` process automatically.
+
 ## Open questions
 
 - **MCP-based RAG inside Jan vs. dedicated AnythingLLM.** Phase 2 uses AnythingLLM for time-to-working. A later phase may swap to a Zotero MCP server feeding Jan directly, which is more SOV-spirit (composable parts). Decision deferred to phase-2 retro.
