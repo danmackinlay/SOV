@@ -137,7 +137,10 @@ Launch the proxy (from the repo root — all SOV commands run from there, per th
 ./phases-apple/bin/litellm-start.sh
 ```
 
-You now have an OpenAI-compatible endpoint at `http://127.0.0.1:4000/v1` that knows three model names. The wrapper handles `--config`, `--host 127.0.0.1`, and the port default; extra args pass through.
+You now have an OpenAI-compatible endpoint at `http://127.0.0.1:4000/v1` that knows three model names. The wrapper handles `--config`, `--host 127.0.0.1`, and the port default; extra args pass through. Two env-var overrides if you want to deviate:
+
+- `LITELLM_CONFIG=path/to/other.yaml ./phases-apple/bin/litellm-start.sh` — point at a different config file.
+- `LITELLM_PORT=4001 ./phases-apple/bin/litellm-start.sh` — bind a different port (e.g. when running two proxies side-by-side for A/B work).
 
 **Why a wrapper and not just `litellm --config ... --host 127.0.0.1 --port 4000`?** Two reasons:
 
@@ -180,12 +183,10 @@ Jan's internal MLX backend from phase 0 doesn't need to be disabled — it just 
 
 Aider is the first agentic-coding client wired against the SOV stack. It edits files via unified-diff prompting, which works well even on 30 B-class local models because it sends small per-turn payloads rather than re-streaming the whole file.
 
-Configure Aider via env vars (these belong in your `.envrc.local`):
+**Env vars** — Aider (and any other openai-SDK client) discovers the proxy via two env vars:
 
-```bash
-export OPENAI_API_BASE=http://127.0.0.1:4000/v1
-export OPENAI_API_KEY=anything-litellm-doesnt-check
-```
+- `OPENAI_API_BASE` is **auto-set** by [`phases-apple/.envrc`](../.envrc) to `http://127.0.0.1:4000/v1` (the wrapper's port). No action required as long as your cwd is anywhere under `phases-apple/`. Repo-root cwd inherits via direnv's parent chain on shell load. Override in `.envrc.local` if you ever want a different proxy.
+- `OPENAI_API_KEY` is **per-collaborator** and lives in your `.envrc.local` — see [`.envrc.example`](../../.envrc.example) for the template. At phase 1 LiteLLM doesn't validate the key (any non-empty string works; a sentinel like `local-not-checked` is nice in tracebacks); at phase 2 it becomes the proxy's master key.
 
 Launch in a directory you'd like Aider to edit:
 

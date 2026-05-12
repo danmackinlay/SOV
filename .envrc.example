@@ -34,9 +34,20 @@
 # either track's `local-cloud` / `anthropic-claude` aliases. Optional.
 # export ANTHROPIC_API_KEY=""
 
-# OpenAI API key. Only set if you want LiteLLM to route to OpenAI as a
-# cross-stack option. Optional.
-# export OPENAI_API_KEY=""
+# OpenAI API key. Two distinct roles depending on phase, same env var:
+#
+# - Phase 1 (apple track): used by Aider / opencode / openai-SDK
+#   clients pointed at the *local* LiteLLM proxy. The proxy doesn't
+#   validate the key at this stage, so any non-empty string works.
+#   A sentinel like "local-not-checked" makes it obvious in tracebacks.
+# - Phase 2 (apple track): becomes the LiteLLM master key for the
+#   local proxy (master-key gating enters when cloud backends are
+#   wired). At that point this needs a real per-collaborator secret.
+# - Cloud routing: set if you want LiteLLM to *also* route to OpenAI
+#   as a cross-stack fallback. Distinct from the local-proxy role
+#   above; LiteLLM uses different config keys for each.
+#
+# export OPENAI_API_KEY="local-not-checked"
 
 # ----------------------------------------------------------------------
 # Cloud track only (phases-cloud/)
