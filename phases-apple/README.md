@@ -103,6 +103,24 @@ Documented properly per sub-phase; for now, the rules that apply throughout:
 | [`bin/model-switch.sh`](bin/model-switch.sh) | Kill the running mlx-lm.server, launch a new one by alias, wait for health |
 | [`bin/model-status.sh`](bin/model-status.sh) | One-shot summary: Ollama, MLX process, memory pressure, HF cache disk |
 
+## Why Jan as a thin client, not as a full stack
+
+Jan was designed to be self-contained — it ships [Cortex](https://github.com/janhq/cortex.cpp) (a llama.cpp / GGUF runtime) and, since [Jan 0.7.7](https://github.com/janhq/jan/releases/tag/v0.7.7) (Feb 2026), a native MLX backend bundled inside the app. The Configurable Model Providers feature we use here — pointing Jan at `http://127.0.0.1:8080/v1` — is a bolt-on, not Jan's design centre. There are three coherent ways to run Jan on Apple Silicon; SOV picks the middle one:
+
+| Posture | Engine | "Easy" | Composable with SOV stack |
+|---|---|---|---|
+| Jan as full MLX stack | Jan's native MLX backend (0.7.7+) | ✅ one app, one window | ❌ — Jan owns the model lifecycle, port, params |
+| **Jan as thin client to `mlx_lm.server`** (this track) | External `mlx_lm.server` launched by `bin/model-switch.sh` | ⚠️ two things to start | ✅ — fits LiteLLM, `model-switch.sh`, cross-track parity |
+| Jan as full GGUF stack via Cortex | llama.cpp / Cortex (Jan's default) | ✅ one app | ❌ and slower on Apple Silicon than MLX |
+
+The MLX-in-Jan path is a legitimate alternative for someone doing laptop-only LLM work with no interest in the SOV stack — same MLX speed advantage, single-app convenience, Jan handles model download / parameter UI / lifecycle. We pass on it for three SOV-specific reasons:
+
+1. **LiteLLM (phase 1) needs a backend at a fixed `localhost:8080`** you control. Jan's internal MLX runtime isn't designed to be that endpoint.
+2. **`bin/model-switch.sh` discipline is cross-phase.** Jan's internal model picker doesn't compose with it.
+3. **Cross-track muscle memory.** Jan on the cloud audition is also a thin client (against vLLM); keeping the apple-track posture identical means you don't context-switch UI behaviours between the two.
+
+**One concrete friction to watch for in either posture:** Jan launches its internal runtime(s) on startup whether or not you're using them. The "spinner waiting for a model server" you may see on first launch is Cortex / the MLX backend starting up, not Jan failing to connect to your external endpoint. On a 128 GB box it's invisible; on tighter machines you may want to disable internal-runtime auto-start in **Settings → Local API Server** so RAM isn't pre-allocated to runtimes you don't use. Don't let Jan auto-download models either — use `hf download` so the cache discipline below applies and `bin/model-status.sh` reflects reality.
+
 ## Cleanup & disk management
 
 The Hugging Face cache at `~/.cache/huggingface/` accumulates relentlessly — every `hf download` lands a new revision, MoE weight shards are big, nothing is ever auto-removed. Budget on disk hygiene every few weeks.
