@@ -77,11 +77,11 @@ Sub-phase directories are created when started, same convention as the main SOV 
 
 | Directory | What | Status |
 |---|---|---|
-| [`phase-0/`](phase-0/) | mlx-lm + Jan + Qwen3-30B-A3B-Thinking; confirm one model "feels" useful | scoped |
-| `phase-1/` | LiteLLM proxy + Aider; edit a `.qmd` against `local-small` | pending |
-| `phase-2/` | RAG: Marker + LanceDB + AnythingLLM over a Zotero subset | pending |
-| `phase-3/` | Stretch model + vision: `local-big` and Qwen2.5-VL-7B loaded on demand | pending |
-| `phase-4/` | Side quests: Draw Things, ComfyUI; opencode as an Aider alternative; Stable Audio Open if motivated | pending |
+| [`phase-0/`](phase-0/) | Jan-as-full-MLX-stack one-shot: install Jan, chat with a local MLX model, confirm Apple Silicon LLMs work for you. Disposable; no extension to agentic coding. | scoped |
+| [`phase-1/`](phase-1/) | SOV-style composable stack: `mlx_lm.server` + LiteLLM + Jan-as-thin-client + Aider. Unlocks agentic coding. | scoped |
+| `phase-2/` | RAG: Marker + LanceDB + AnythingLLM over a Zotero subset; cloud-fallback aliases in LiteLLM | pending |
+| `phase-3/` | Stretch model + vision: `local-big` and Qwen3-VL-8B loaded on demand | pending |
+| `phase-4/` | Side quests: LibreChat (web UI + MCP testing via OrbStack), opencode (Claude-Code-alike), Draw Things, ComfyUI, Stable Audio Open if motivated | pending |
 
 ## Operational discipline
 
@@ -95,6 +95,7 @@ Documented properly per sub-phase; for now, the rules that apply throughout:
 - **Update mlx-lm every few weeks** (`uv tool upgrade mlx-lm`). New Qwen / DeepSeek releases need fresh architecture support.
 - **LiteLLM (phase 1 onward) pinned by digest, never internet-exposed.** Even on a laptop bound to `127.0.0.1`. Pin a known-good version ≥1.83.7 (CVE-2026-42208 pre-auth SQL injection fixed there; a March 2026 PyPI supply-chain attack pushed malicious 1.82.7/1.82.8). On a laptop the blast radius is small but the discipline is identical to the cloud-track rule.
 - **Honest about what mlx-lm gives up vs. the cloud audition.** No built-in RadixAttention-style prefix cache, no xgrammar-class structured-output framework, no FP8 path on Apple Silicon. For prose editing, occasional code edits, and PDF Q&A the practical impact is unmeasured — possibly small. If you find sustained multi-turn agentic sessions (long Aider conversations, repeated RAG over the same shared prefix) feel materially slower than the same workflow against a cloud SGLang/vLLM endpoint, this is the likely cause. We haven't benchmarked it head-to-head and don't want to overclaim either direction.
+- **Container runtime for compose-y workloads (phase 4 onward): [OrbStack](https://orbstack.dev) preferred, [Colima](https://github.com/abiosoft/colima) as the FOSS fallback. Avoid Docker Desktop.** OrbStack uses macOS's Virtualization.framework natively (real memory pressure, not VM-allocated-and-pinned), ~10× faster filesystem I/O than Docker Desktop, no nagware; closed-source, free for personal use, paid above commercial thresholds. Colima (Apache-2.0) is fully open-source and works fine for the workloads we'll throw at it — slower than OrbStack for I/O but no licensing concerns. Mirrors the [Draw Things exception](../docs/decisions/0004-apple-laptop-personal-track.md) (closed-source GUI acceptable where it saves material time; FOSS alternative documented). Docker Desktop's eager-VM model and recurring upgrade nags are out of step with the rest of this track and we're not the audience for either.
 
 ## Helpers
 
@@ -142,7 +143,7 @@ To move the cache off the boot volume (large models on an external SSD, say), se
 
 - **MCP-based RAG inside Jan vs. dedicated AnythingLLM.** Phase 2 uses AnythingLLM for time-to-working. A later phase may swap to a Zotero MCP server feeding Jan directly, which is more SOV-spirit (composable parts). Decision deferred to phase-2 retro.
 - **opencode adoption.** Phase 4 scopes it as an Aider-alternative experiment. If it works well on `local-small`, may promote it; if it's too token-hungry for 30B-class models, stays an experiment.
-- **Cloud routing through LiteLLM.** Phase 1 wires Anthropic into LiteLLM as `anthropic-claude`. Flight-mode behaviour: model alias errors out cleanly if upstream unreachable, the local aliases keep working.
+- **Cloud routing through LiteLLM.** Phase 2 wires Anthropic / OpenAI into LiteLLM as fallback aliases for when local context is insufficient (deferred from phase 1 to keep the SOV-style stack rollout focused on local-only first). Flight-mode behaviour: model alias errors out cleanly if upstream unreachable, the local aliases keep working.
 - **Embedding model upgrade.** Phase 2 uses the existing `mxbai-embed-large` via Ollama, but that model's Ollama distribution has been frozen at v1 since 2024 — Mixedbread's 2026 flagship (Wholembed v3) is hosted-only. For an open-weight upgrade path the field has moved to [Qwen3-Embedding](https://huggingface.co/Qwen) and Jina v5. Re-evaluate at phase 2 if retrieval quality is the bottleneck.
 
 ## Freshness audit
