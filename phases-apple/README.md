@@ -67,6 +67,8 @@ Apple Silicon Macs span 16 GB to 192 GB+ of unified memory; the right pick per a
 
 Quant suffixes assume MLX repos in [`mlx-community/`](https://huggingface.co/mlx-community) on Hugging Face; substitute the closest existing quant when the exact one isn't published. The [`model-switch.sh`](bin/model-switch.sh) helper has these picks in one place — edit, don't fork.
 
+**Heavier daily-driver alternative for 64 GB+ Macs:** [Qwen3-Next-80B-A3B-Thinking](https://huggingface.co/Qwen/Qwen3-Next-80B-A3B-Thinking) (3 B active, 80 B total; Sep 2025 release sitting between Qwen3-30B-A3B and Qwen3.5-35B-A3B in the lineage). MLX-4bit port at [`mlx-community/Qwen3-Next-80B-A3B-Thinking-4bit`](https://huggingface.co/mlx-community/Qwen3-Next-80B-A3B-Thinking-4bit), ~45 GB resident. Same per-token speed as the smaller A3B picks (still 3 B active), more quality at the cost of more RAM. Swap into `local-small` if you have headroom and prefer ceiling-of-quality over lightness.
+
 > **Model picks rot fast.** This table reflects May 2026. Before bootstrapping a fresh machine, re-check [mlx-community](https://huggingface.co/mlx-community), [Qwen](https://huggingface.co/Qwen) and [deepseek-ai](https://huggingface.co/deepseek-ai) for newer releases. The shape (MoE daily + dense math + larger-MoE stretch) is more durable than the specific repo names; substitute generation-for-generation as the families move.
 
 ## Sub-phases
