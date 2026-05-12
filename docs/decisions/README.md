@@ -9,3 +9,4 @@ Numbered ADRs documenting the *why* behind architectural choices in SOV. Format 
 | [0003](0003-audition-surface-and-auth.md) | Audition surface and ephemeral auth model | Accepted |
 | [0004](0004-apple-laptop-personal-track.md) | Apple laptop as a parallel personal track | Accepted |
 | [0005](0005-apple-neural-engine.md) | Apple Neural Engine: not a target for the laptop track | Accepted |
+| [0006](0006-secret-handling.md) | Secret handling and configuration (direnv + phased adoption) | Accepted |

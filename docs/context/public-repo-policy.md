@@ -11,7 +11,7 @@ The SOV repo is public. We benefit from openness: the rationale documents are al
 
 ## What does NOT go in the public repo
 
-- **Operational secrets.** API keys (RunPod, Lambda, vast.ai, OpenAI-compatible endpoints, HuggingFace tokens, anything else); SSH keys; access tokens. `.env` files. These are gitignored; double-check before each commit.
+- **Operational secrets.** API keys (RunPod, Lambda, vast.ai, OpenAI-compatible endpoints, HuggingFace tokens, anything else); SSH keys; access tokens. `.env` and `.envrc.local` files. These are gitignored; double-check before each commit. The full pattern for how collaborators handle their own credentials is in [ADR 0006](../decisions/0006-secret-handling.md) — short version: direnv + per-collaborator `.envrc.local`, optionally backed by Bitwarden / 1Password.
 - **Identifying info on individual humans** beyond the publicly-named project leads. No teammate's home address, no real names of would-be members, no Slack/Signal/email handles unless the person has explicitly OK'd publication.
 - **Member rosters** (when there are members). Membership belongs to the cooperative, not the public.
 - **Internal cooperative discussions.** Meeting notes, contentious deliberations, financial details of individual members. Use a private channel; if a decision lands in the repo, it lands as a finalised ADR or short note, not as a transcript.
@@ -32,8 +32,8 @@ If we lock down, we announce it in the README first so anyone watching knows wha
 
 Before any commit, particularly when scripts or `.env` examples are involved:
 
-1. `git status` — confirm `.env` and any `secrets/` paths are not staged.
+1. `git status` — confirm `.env`, `.envrc.local`, and any `secrets/` paths are not staged.
 2. `git diff --staged | grep -iE 'token|key|secret|password|api[-_]?key'` — quick eyeball for inline credentials.
-3. If a script needs a credential, it reads from environment variables. Never inline.
+3. If a script needs a credential, it reads from environment variables (loaded via direnv from `.envrc.local`). Never inline.
 
 If something sensitive does land in a commit, **don't just delete it in a follow-up commit** — the history is public. Rotate the credential immediately and consider rewriting history (`git filter-repo`) if it was a high-value secret.

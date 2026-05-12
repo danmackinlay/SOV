@@ -3,6 +3,8 @@
 # Local secrets and runtime state
 .env
 .env.local
+.envrc.local
+.direnv/
 *.pem
 *.key
 secrets/

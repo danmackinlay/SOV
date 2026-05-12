@@ -1,0 +1,67 @@
+# SOV — per-collaborator secrets template
+#
+# Copy to `.envrc.local`, fill in your personal values, then run
+# `direnv allow` in the repo root. The `.envrc.local` file is gitignored
+# and must never be committed. Policy: ADR 0006.
+#
+# Vars are grouped by phase and track. Only fill in what's relevant to
+# the work you're doing — unset vars are harmless on the side that
+# doesn't use them.
+#
+# ----------------------------------------------------------------------
+# Bitwarden / 1Password integration (optional)
+# ----------------------------------------------------------------------
+# If you'd rather source values from your personal vault than store them
+# here, replace the `export FOO=...` lines below with shell that calls
+# your CLI. Examples:
+#
+#   export RUNPOD_API_KEY="$(bw get notes runpod-api-key)"
+#   export HF_TOKEN="$(op read 'op://Personal/HuggingFace/token')"
+#
+# direnv will cache the resolved values for the session.
+
+# ----------------------------------------------------------------------
+# Cross-track (both apple and cloud)
+# ----------------------------------------------------------------------
+
+# Hugging Face token. Needed to pull gated models on either track.
+# Get one at https://huggingface.co/settings/tokens (read-only is fine
+# for the audition; write only required if/when phase 2 publishes
+# abliterated weights to your account).
+# export HF_TOKEN=""
+
+# Anthropic API key. Used by LiteLLM when routing to Anthropic from
+# either track's `local-cloud` / `anthropic-claude` aliases. Optional.
+# export ANTHROPIC_API_KEY=""
+
+# OpenAI API key. Only set if you want LiteLLM to route to OpenAI as a
+# cross-stack option. Optional.
+# export OPENAI_API_KEY=""
+
+# ----------------------------------------------------------------------
+# Cloud track only (phases-cloud/)
+# ----------------------------------------------------------------------
+
+# RunPod API key — needed to spin pods up/down via runpodctl or API.
+# https://www.runpod.io/console/user/settings
+# export RUNPOD_API_KEY=""
+
+# Lambda API key — only needed at phase 1 if Lambda is the chosen
+# provider for 8x H100. https://lambda.ai/account
+# export LAMBDA_API_KEY=""
+
+# vast.ai API key — only needed for the cheap-experimentation path at
+# phase 0. https://cloud.vast.ai/account/
+# export VAST_API_KEY=""
+
+# Cloudflare token — only needed if/when phase 1 uses Cloudflare Tunnel
+# as a non-RunPod URL fallback. https://dash.cloudflare.com/profile/api-tokens
+# export CLOUDFLARE_API_TOKEN=""
+
+# ----------------------------------------------------------------------
+# Apple track only (phases-apple/)
+# ----------------------------------------------------------------------
+#
+# No persistent apple-track-specific secrets at this stage. mlx-lm
+# serves locally without auth; embedding models via Ollama run
+# anonymously. Anthropic/OpenAI keys above cover cross-stack routing.
