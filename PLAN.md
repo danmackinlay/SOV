@@ -17,7 +17,7 @@ We're auditioning a sovereign-LLM software stack on rented cloud GPUs across fou
 | **0** | Validate the stack end-to-end with a small model | 1× H100 (RunPod / vast.ai) | ~$50–$150 AUD | 1–3 days of active work |
 | **1** | Run the full target model under realistic load | 4–8× H100 (Lambda or RunPod) | ~$500–$1,500 AUD | 1–2 weeks |
 | **2** | De-censor + agentic POC + heterogeneous routing | Same as phase 1 plus 1× H100 sidecar | ~$1,000–$2,500 AUD | 2–3 weeks |
-| **3** | Physical DGX Station migration | NVIDIA DGX Station GB300 | $135k–$195k AUD one-time | TBD; gated on cooperative formation |
+| **3** | Physical DGX Station migration | GB300-class workstation (MSI WS300 / Gigabyte W775 via XENON; NVIDIA-branded DGX Station not shipping to AU as of May 2026) | ~$130k–$170k AUD one-time | TBD; gated on cooperative formation |
 
 The audition through end of phase 2 is **~$1,500–$4,000 AUD** total. That is the budget that lets the three of us decide whether the hardware purchase is worth pitching to a wider group.
 
@@ -38,7 +38,7 @@ The audition through end of phase 2 is **~$1,500–$4,000 AUD** total. That is t
 - Kubernetes, Ansible, NixOS, or any orchestration with a learning curve. Bash + Docker Compose is the floor and the ceiling.
 - DPO / SFT fine-tuning beyond the basic abliteration step. Cost and complexity don't pay off until there's a committed cooperative.
 - Public-facing recruitment material. We summarise for laypeople once the audition is complete.
-- Australian-hosted GPU rental. AU GPU availability is thin and expensive; we accept the US-cloud audition for the prototype and surface the tension in the eventual cooperative pitch.
+- Australian-hosted GPU rental. The AU GPU landscape has grown in 2025–2026 (SHARON AI, ResetData AI-F1, Micron21, NEXTDC colo, hyperscalers), but on-demand hourly pricing still runs ~30–60% above US-region equivalents and most AU offers are bare-metal/monthly leases rather than minute-billed pods — a poor fit for our ephemeral-audition model. We accept the US-cloud audition for the prototype and surface the tension in the eventual cooperative pitch.
 - Multi-region failover, observability platforms beyond a `docker logs`, or any "production hardening" that doesn't earn its keep at three users.
 
 ### Non-goal: matching commercial models
@@ -53,11 +53,11 @@ Full ADRs are in [`docs/decisions/`](docs/decisions/). One-line summaries:
 | Choice | Decision | Why |
 |---|---|---|
 | Audition cloud | RunPod primary; vast.ai for cheap phase-0; Lambda for phase-1 scale | Familiarity, fast spin-up, ephemeral URLs built in. Vast.ai is cheaper but has trust caveats. |
-| Inference engine | vLLM primary; SGLang benchmarked at phase 1; NIM documented for DGX migration | vLLM has the broadest ecosystem (Aider, Claude Code, LangChain) and lowest lock-in. |
-| User-facing surface | OpenAI-compatible endpoint + Open WebUI; Jan as recommended desktop client | OpenAI compat is the universal interface; Open WebUI is zero-install for collaborators. |
+| Inference engine | vLLM primary; SGLang benchmarked at phase 1; Dynamo + NIM documented for DGX migration | vLLM has the broadest ecosystem (Aider, Claude Code, LangChain) and first-class GB300/DGX Station support. SGLang's 2026 numbers may flip this at phase-1 benchmark; see ADR 0002. |
+| User-facing surface | OpenAI-compatible endpoint + Open WebUI; Jan as recommended desktop client | OpenAI compat is the universal interface; Open WebUI is zero-install for collaborators. (Open WebUI's April 2025 license is non-OSI with a 50-user branding clause; acceptable at audition scale, pre-committed to swap to LibreChat at phase 3 if membership crosses the threshold — see ADR 0003.) |
 | Auth (audition) | Ephemeral pod URLs + shared API key + runtime cap | Cost-bounded blast radius even if URL leaks. |
-| Orchestration | `docker run` at phase 0; Docker Compose from phase 1 | Compose is the floor for multi-service. Heterogeneous routing via LiteLLM proxy. |
-| Models | Qwen3-30B → Qwen3-235B → de-censored + reasoning sidecar → DGX | Each phase exercises more of the stack at higher cost; can stop at any phase. |
+| Orchestration | `docker run` at phase 0; Docker Compose from phase 1 | Compose is the floor for multi-service. Heterogeneous routing via LiteLLM proxy (pinned ≥1.83.7, never internet-exposed — see phase 2). |
+| Models | Qwen3.5-35B-A3B → Qwen3.5-122B-A10B (FP8) → de-censored + reasoning sidecar → DGX | Each phase exercises more of the stack at higher cost; can stop at any phase. |
 | Decensoring | Abliteration only at this stage; DPO deferred | Abliteration is ~$50–$100 USD; DPO is $1.5–4k AUD and only earns its keep with a committed cooperative. |
 
 ---
@@ -97,22 +97,24 @@ Some work doesn't fit the cloud-audition phase numbering but is still under SOV'
 
 ### Hardware
 
-- **Primary:** 1× H100 80GB on **RunPod**. Roughly $2–$3 USD/hour as of writing.
+- **Primary:** 1× H100 80GB on **RunPod**. ~$2.40–$3.00 USD/hour (PCIe to SXM) as of May 2026.
 - **Alternative for cost-conscious experimentation:** 1× H100 or RTX 6000 Ada on **vast.ai**, typically 30–50% cheaper. **Caveat:** vast.ai hosts have root on the physical machine. Use only with public open-weight models and synthetic test prompts; do not feed it anything sensitive. ADR in [`docs/decisions/0001-cloud-providers.md`](docs/decisions/0001-cloud-providers.md) covers the trade-off in detail.
 
 ### Model
 
-- **[Qwen3-30B-A3B-Instruct](https://huggingface.co/Qwen/Qwen3-30B-A3B-Instruct-2507)** (or its 4-bit quantized variant) — small enough to fit on one H100 with room for a healthy KV cache.
+- **[Qwen3.5-35B-A3B](https://huggingface.co/Qwen/Qwen3.5-35B-A3B)** (MoE, 3 B active; thinking-by-default; matches the apple-track `local-small`) — small enough to fit on one H100 with room for a healthy KV cache. Serve FP8 (Qwen ships a first-party FP8 build) on H100, or 4-bit AWQ if you want headroom for KV cache.
 - This is *not* the audition model. It's the stack-validation model. Do not draw quality conclusions from it.
 
 ### Software stack
 
 ```
 RunPod pod
-  |--> docker run vllm/vllm-openai:latest serving Qwen3-30B
+  |--> docker run vllm/vllm-openai:v0.20.2 serving Qwen3.5-35B-A3B
   |--> docker run open-webui/open-webui pointed at vLLM
   '--> RunPod proxy URL exposed on a unique random hostname
 ```
+
+(Pin a specific `vllm/vllm-openai` tag — `:latest` is forbidden by §10. Pick the current vLLM release at phase-0 launch and pin it.)
 
 No Docker Compose at this phase. Two `docker run` commands and a launch script that orchestrates them is enough.
 
@@ -138,7 +140,7 @@ A collaborator who has never seen the repo can:
 2. Set their RunPod API key in `.env`
 3. Run `./phases-cloud/phase-0-stack-validation/launch.sh`
 4. Open the printed URL in their browser
-5. Have a conversation with Qwen3-30B in Open WebUI
+5. Have a conversation with Qwen3.5-35B-A3B in Open WebUI
 6. Hit the OpenAI-compatible endpoint from `curl` with the printed API key
 7. Walk away and have it auto-destroy at the runtime cap
 
@@ -165,23 +167,25 @@ A collaborator who has never seen the repo can:
 
 ### Hardware
 
-- **Primary:** 4–8× H100 80GB on **Lambda Labs** or **RunPod**.
-- 4× H100 = 320 GB HBM. Qwen3-235B-A22B at AWQ 4-bit needs ~124 GB for weights, leaving ~190 GB for KV cache across the cluster. That fits comfortable concurrency for our 3-collaborator audition.
-- 8× H100 if we want headroom for the SGLang benchmark and concurrent agentic sessions.
+- **Primary:** 4–8× H100 80GB on **Lambda** (lambda.ai — formerly lambdalabs.com) or **RunPod**.
+- 4× H100 = 320 GB HBM. Qwen3.5-122B-A10B at FP8 is ~122 GB; at AWQ 4-bit ~65 GB. Either fits 4× H100 with generous KV-cache headroom; 8× H100 only if SGLang side-by-side benchmarking and concurrent agentic sessions demand it (memory is no longer the binding constraint at the smaller-model successor).
+- **H200 path:** 3× H200 80→141 GB HBM3e is now a viable alternative, shrinking the phase-1 minimum spend ~25%. Cost per GPU is similar to H100 (~$4 USD/hr on RunPod) but you need fewer of them. B200 is on the menu but unnecessary at our scale through phase 2.
 
 ### Model
 
-- **[Qwen3-235B-A22B-Instruct-2507](https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507) at AWQ 4-bit.**
-- Confirms numbers in the [technical rationale](https://danmackinlay.name/notebook/aus_sovereign_llm_technical.html) — same model, same quantization, same KV-cache configuration.
+- **[Qwen3.5-122B-A10B](https://huggingface.co/Qwen/Qwen3.5-122B-A10B)**, served as **FP8** ([Qwen/Qwen3.5-122B-A10B-FP8](https://huggingface.co/Qwen/Qwen3.5-122B-A10B-FP8)) on H100/H200, with AWQ 4-bit ([cyankiwi/Qwen3.5-122B-A10B-AWQ-4bit](https://huggingface.co/cyankiwi/Qwen3.5-122B-A10B-AWQ-4bit)) as the smaller-footprint fallback.
+- Why FP8 not AWQ as default: as of 2026, FP8 (W8A8) is vLLM's recommended quantization on Hopper — hardware-accelerated, ~2× memory reduction, up to 1.6× throughput, near-BF16 quality. AWQ wins on accuracy at INT4 and remains the right choice when memory is genuinely tight (or for vRAM-constrained sidecars), but the cost/quality trade-off has tilted toward FP8.
+- Why Qwen3.5-122B-A10B not Qwen3-235B: same audition aim, smaller and newer model, comparable quality on public benchmarks, fits 3× H200 or 4× H100 with room to spare. Qwen3.5-397B-A17B is the new flagship but overkill for 3 collaborators and lacks community AWQ ports.
 
 ### Software stack
 
 ```
 Lambda or RunPod multi-GPU pod
   '--> docker compose up
-        |--> vllm/vllm-openai (Qwen3-235B AWQ, tensor-parallel across 4-8 GPUs)
+        |--> vllm/vllm-openai (Qwen3.5-122B-A10B FP8, tensor-parallel across 4-8 GPUs)
         |--> open-webui (pointed at vLLM)
-        |--> nginx or caddy reverse proxy w/ shared-key auth
+        |--> Caddy reverse proxy w/ shared-key auth (nginx acceptable; Caddy
+        |    preferred for ~10-line config + automatic TLS when off RunPod proxy)
         '--> [optional] sglang sidecar for benchmarking
 ```
 
@@ -194,7 +198,8 @@ This is the phase where we generate the evidence for or against the hardware pur
 1. **Single-stream latency** (TTFT and tokens/sec) at three context lengths: 2k, 16k, 64k.
 2. **Concurrent throughput** with 3, 8, and 16 simulated users running representative workloads.
 3. **Agentic round-trip** — measure the full latency of one tool-calling cycle (prompt → tool call → tool result → response) on at least one realistic agentic task.
-4. **vLLM vs. SGLang** side-by-side on the same workload. Document any differences > 15%.
+4. **vLLM vs. SGLang** side-by-side on the same workload. Break results down by workload class — unique-prompt vs. prefix-heavy/multi-turn — since SGLang's RadixAttention advantage is workload-dependent. The 2026 public numbers say the gap is large on the workloads we care about (multi-turn agentic, DeepSeek-class sidecar models); a flat ">15% threshold" is no longer the right framing. See [ADR 0002](docs/decisions/0002-inference-engine.md) for the revised re-evaluation criteria.
+5. **FP8 vs AWQ 4-bit** side-by-side on the same model, with throughput and accuracy on a held-out task suite. This is the live quantization trade-off in 2026 — record the answer for SOV's workload, not just the general claim.
 
 Output: a `phases-cloud/phase-1-full-audition/benchmarks.md` with results, raw data, and a recommendation.
 
@@ -218,11 +223,11 @@ Output: a `phases-cloud/phase-1-full-audition/benchmarks.md` with results, raw d
 
 | Item | Cost |
 |---|---|
-| 8× H100 on Lambda @ ~$24 USD/hr × 30 hrs of active testing | ~$720 USD |
+| 8× H100 on Lambda @ ~$32 USD/hr × 30 hrs of active testing | ~$960 USD |
 | RunPod or vast.ai equivalents for ad-hoc work between sessions | ~$200 USD |
-| Phase 1 total | **~$1,000–$1,500 AUD** |
+| Phase 1 total | **~$1,200–$1,800 AUD** |
 
-If we restrict to 4× H100 and tight session discipline, this drops by ~40%.
+If we restrict to 4× H100 (or 3× H200) and tight session discipline, this drops by ~40%.
 
 ---
 
@@ -234,7 +239,7 @@ This phase has three independent workstreams that can run in parallel.
 
 ### Workstream A: Abliteration
 
-Apply abliteration to Qwen3-235B-A22B using [Heretic](https://github.com/p-e-w/heretic) or [llm-abliteration](https://github.com/jim-plus/llm-abliteration). Run on rented 8× H100 for 2–4 hours.
+Apply abliteration to Qwen3.5-122B-A10B using **[Heretic](https://github.com/p-e-w/heretic)** (actively maintained as of May 2026, explicit Qwen3.5 support, 3000+ community-produced models). [llm-abliteration](https://github.com/jim-plus/llm-abliteration) is the older-architecture fallback (tested through Qwen2.5/Mistral-Nemo/Gemma-3; no documented Qwen3.5 coverage). Run on rented 8× H100 for 2–4 hours.
 
 **Deliverables:**
 - [`phases-cloud/phase-2-decensor-agentic/abliteration/run.sh`](phases-cloud/) — automated pipeline
@@ -265,8 +270,8 @@ A runnable demo where each collaborator can experience an agent doing real-ish w
 
 Add a [LiteLLM](https://github.com/BerriAI/litellm) proxy in front of the inference layer. Wire two backends:
 
-1. **Qwen3-235B-A22B (abliterated)** — the workhorse.
-2. **DeepSeek-R1-Distill-Qwen-32B** or similar — a fast/cheap "sanity-check" or "pre-filter" model running on its own GPU.
+1. **Qwen3.5-122B-A10B (abliterated)** — the workhorse.
+2. **[DeepSeek-R1-0528-Qwen3-8B](https://huggingface.co/deepseek-ai/DeepSeek-R1-0528-Qwen3-8B)** — fast/cheap "sanity-check" or "pre-filter" thinking model. The 8B distill ties Qwen3-235B-Thinking on AIME-2024, runs on a fractional H100, and is the current sweet spot for the small-reasoning slot. (We can swap to a Qwen3.5 thinking variant once an mlx-compatible port lands, for parity with the apple-track `local-math`.)
 
 LiteLLM presents a single OpenAI-compatible endpoint. Clients pick a model by name; LiteLLM routes to the right backend.
 
@@ -276,6 +281,7 @@ This sets up the architecture pattern we'd want on the eventual DGX setup: workh
 - Updated [`docker-compose.yml`](phases-cloud/) including LiteLLM and the second model server
 - [`phases-cloud/phase-2-decensor-agentic/routing/litellm-config.yaml`](phases-cloud/)
 - A short runbook documenting how to add a third backend
+- LiteLLM container **pinned by digest to a version ≥1.83.7** (CVE-2026-42208 pre-auth SQL injection fixed in 1.83.7; a March 2026 PyPI supply-chain attack pushed malicious 1.82.7/1.82.8 — pin by digest, not by tag). LiteLLM is **never exposed directly to the internet** — always behind the Caddy reverse proxy from §5.
 
 **Cost:** ~1× extra H100-hour per testing session; mostly absorbed in workstream A and B's GPU time.
 
@@ -300,9 +306,9 @@ This is gated on:
 
 **At a high level**, this phase will:
 
-1. Place the order through an Australian NVIDIA partner ([XENON](https://xenon.com.au/product/nvidia-dgx-station/), Dell, MMT). Lead time: months.
+1. Place the order through an Australian NVIDIA partner. As of May 2026, NVIDIA-branded DGX Station is **not shipping to AU** — [XENON](https://xenon.com.au) sells the GB300-equivalent OEM workstations (MSI WS300 ~AU$130k, Gigabyte W775) instead. Dell and MMT have similar OEM channels. Lead time: months.
 2. Pick the hosting venue: home, shared office, or colo. The rationale doc has a full discussion; the network reliability section will drive the call.
-3. Migrate the phase-2 stack to the DGX. The whole point of standardising on vLLM + Docker Compose is that this should be a config change, not a rewrite. The rationale document mentions NIM as the smoothest migration target; we will evaluate at the time but expect to stay on vLLM.
+3. Migrate the phase-2 stack to the DGX. The whole point of standardising on vLLM + Docker Compose is that this should be a config change, not a rewrite. **vLLM now has first-class GB300/DGX Station support** (added in the GTC 2026 timeframe), so the migration is plausible without leaving the audition stack at all. The rationale document mentions NIM as the smoothest migration target; the May-2026 landscape also offers **[NVIDIA Dynamo 1.0](https://github.com/ai-dynamo/dynamo)**, an open-source distributed inference stack that integrates with vLLM/SGLang/llm-d and is less locked-in than NIM. We will evaluate Dynamo and NIM at the time but expect to stay on vLLM.
 4. Burn-in and member onboarding.
 
 **We will write phase 3 in detail when we are within ~3 months of placing an order.** Everything before that is speculative.
@@ -335,7 +341,7 @@ These apply to every phase.
 
 ### Reproducibility
 
-- Every script pins versions: vLLM image tag, model revision, RunPod pod template ID. No `:latest` tags except where explicitly marked "track upstream".
+- Every script pins versions: vLLM image tag, model revision, RunPod pod template ID. No `:latest` tags except where explicitly marked "track upstream". LiteLLM (phase 2) is pinned **by digest** rather than by tag — see CVE-2026-42208 and the March 2026 PyPI supply-chain compromise for why.
 - The Compose file is the contract; updating it requires updating the phase doc that references it.
 
 ---
@@ -349,7 +355,8 @@ These are real questions we have not yet answered. Record the resolution here wh
 3. **Is the Australian-cloud-purity tension worth surfacing in the audition itself, or only in the eventual recruitment doc?** Default: surface in [`docs/decisions/0001-cloud-providers.md`](docs/decisions/) and let it inform the recruitment narrative; don't change audition behaviour.
 4. **What's the right license for this repo?** Probably MIT or Apache-2.0 to encourage forking by other collectives. Resolve before going public.
 5. **Phase 3 hosting venue (home / office / colo).** Defer until phase 2 results inform reliability requirements.
-6. **NIM evaluation depth at phase 3.** We've decided not to use it as the audition path, but we should at minimum verify it can serve the same weights when we get to physical hardware. Defer.
+6. **NIM evaluation depth at phase 3.** We've decided not to use it as the audition path, but we should at minimum verify it (and now Dynamo 1.0) can serve the same weights when we get to physical hardware. Defer.
+7. **When do we swap Open WebUI for LibreChat?** Trigger: any phase-3 plan with >50 members would cross Open WebUI's April-2025 branding clause. Pre-committed swap to LibreChat (MIT) at that point. See [ADR 0003](docs/decisions/0003-audition-surface-and-auth.md).
 
 ---
 
@@ -392,3 +399,7 @@ A phase directory always contains:
 Immediate next step is to **scope phase 0 in detail with Dan**: confirm RunPod account credentials and quotas, decide on `runpodctl` vs. raw API, settle the Open WebUI vs. raw API surface for the first session, and write the launch script. That conversation produces the contents of [`phases-cloud/phase-0-stack-validation/`](phases-cloud/) and triggers the first auditioned run.
 
 After phase 0 ships, we recap what we learned, update this plan if anything changed, and scope phase 1 the same way.
+
+---
+
+**Last freshness audit:** 2026-05-12. Provider pricing, model picks, quantization defaults, and inference-engine landscape (vLLM/SGLang/Dynamo) verified against upstream sources. Re-audit before each phase begins; staleness compounds.
