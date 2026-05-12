@@ -17,13 +17,13 @@ SOV is the engineering arm of the sovereign-LLM cooperative described in [Dan's 
 
 These are documented with full reasoning in [`docs/decisions/`](docs/decisions/). Quick reference:
 
-- **Cloud (audition):** RunPod primary; vast.ai for cheap exploration with a security caveat; Lambda Labs for full-scale phase 1.
-- **Inference engine:** vLLM primary. SGLang benchmarked side-by-side at phase 1. NIM documented as a DGX-migration option but not the prototype path.
-- **Surface:** OpenAI-compatible endpoint as the canonical interface. Open WebUI as the hosted browser UI. Jan recommended as a supported desktop client.
-- **Routing (phase 2+):** LiteLLM in front of multiple model backends for heterogeneous deployments.
+- **Cloud (audition):** RunPod primary; vast.ai for cheap exploration with a security caveat; Lambda for full-scale phase 1.
+- **Inference engine:** vLLM primary, with first-class GB300 support. SGLang benchmarked side-by-side at phase 1 (2026 numbers may flip the call). NVIDIA Dynamo and NIM documented as DGX-migration options.
+- **Surface:** OpenAI-compatible endpoint as the canonical interface. LibreChat as the hosted browser UI (revised from Open WebUI on 2026-05-12 — see ADR 0003). Jan recommended as a supported desktop client.
+- **Routing (phase 2+):** LiteLLM in front of multiple model backends for heterogeneous deployments. Pinned ≥1.83.7 by digest, never internet-exposed.
 - **Auth (audition only):** Ephemeral pod URLs + shared API key + runtime cap. No real user accounts at the prototype stage.
 - **Orchestration:** Bare `docker run` at phase 0; Docker Compose from phase 1 onward.
-- **Models:** Qwen3-30B-A3B (phase 0) → Qwen3-235B-A22B AWQ (phase 1) → de-censored variant + reasoning sidecar (phase 2) → physical DGX (phase 3).
+- **Models (cloud track):** Qwen3.5-35B-A3B (phase 0) → Qwen3.5-122B-A10B FP8 (phase 1) → de-censored variant + DeepSeek-R1-0528-Qwen3-8B reasoning sidecar (phase 2) → physical DGX (phase 3).
 
 ## Working norms
 
@@ -33,6 +33,7 @@ These are documented with full reasoning in [`docs/decisions/`](docs/decisions/)
 - **The rationale documents are external.** They live on Dan's blog ([post](https://danmackinlay.name/notebook/aus_sovereign_llm.html), [technical](https://danmackinlay.name/notebook/aus_sovereign_llm_technical.html)) and are the canonical source. SOV doesn't mirror them, to avoid drift.
 - **The repo is public.** Treat anything you write as world-readable. Operational secrets and member info do not belong here — see [`docs/context/public-repo-policy.md`](docs/context/public-repo-policy.md) for the full perimeter and pre-commit checks.
 - **Secrets via direnv.** Scripts read credentials from environment variables; the values live in a per-collaborator `.envrc.local` at the repo root (gitignored). Never inline a secret in a committed file. Policy: [ADR 0006](docs/decisions/0006-secret-handling.md).
+- **Commands run from repo root unless explicitly noted.** Every path in a runbook (`./phases-apple/bin/model-switch.sh`, `phases-apple/phase-1/litellm-config.yaml`, etc.) is repo-relative. direnv loads the right `.envrc` chain from `cd`, so working from repo root keeps cross-track scripts and shared helpers consistent. If a runbook step needs a different cwd, it says so.
 
 ## When asked to "build the next thing"
 

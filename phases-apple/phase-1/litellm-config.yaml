@@ -1,0 +1,35 @@
+# LiteLLM proxy config — Apple laptop phase 1.
+#
+# Committed to the repo: contains no secrets. Phase 2 will add cloud
+# backends (Anthropic/OpenAI) whose api_key fields read from env vars
+# via direnv (`os.environ/ANTHROPIC_API_KEY`), so this file stays
+# committable.
+#
+# Run from the repo root:
+#   litellm --config phases-apple/phase-1/litellm-config.yaml --port 4000
+#
+# All three local-* aliases point at the same port 8080. bin/model-switch.sh
+# is the thing that controls which actual model is loaded there; this proxy
+# just provides stable client-facing names.
+
+model_list:
+  - model_name: local-small
+    litellm_params:
+      model: openai/mlx-community/Qwen3.5-35B-A3B-4bit
+      api_base: http://127.0.0.1:8080/v1
+      api_key: not-needed
+
+  - model_name: local-math
+    litellm_params:
+      model: openai/mlx-community/DeepSeek-R1-0528-Qwen3-8B-4bit
+      api_base: http://127.0.0.1:8080/v1
+      api_key: not-needed
+
+  - model_name: local-big
+    litellm_params:
+      model: openai/mlx-community/Qwen3.5-122B-A10B-4bit
+      api_base: http://127.0.0.1:8080/v1
+      api_key: not-needed
+
+litellm_settings:
+  drop_params: true   # silently drop unsupported params instead of erroring

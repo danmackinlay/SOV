@@ -16,6 +16,6 @@ Each subdirectory is created when its phase begins, not before. Every phase dire
 | Directory | What |
 |---|---|
 | `phase-0-stack-validation/` | Single-GPU end-to-end stack test with Qwen3-30B |
-| `phase-1-full-audition/` | Qwen3-235B-A22B AWQ on 4–8× H100 with benchmarks |
+| `phase-1-full-audition/` | Qwen3.5-122B-A10B FP8 on 3× H200 or 4–8× H100 with benchmarks (vLLM vs SGLang; FP8 vs AWQ) |
 | `phase-2-decensor-agentic/` | Abliteration + agentic POC + heterogeneous routing |
 | `phase-3-dgx-migration/` | Physical DGX Station migration (gated on cooperative formation) |

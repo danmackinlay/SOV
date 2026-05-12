@@ -27,7 +27,7 @@ uv tool install mlx-lm
 
 # Hugging Face CLI — installs the new `hf` binary (`huggingface-cli` was
 # deprecated in 2026 and is now a non-functional warning shim).
-uv tool install huggingface_hub
+uv tool install hf
 
 # LiteLLM proxy with the [proxy] extras for the OpenAI-compat router
 uv tool install 'litellm[proxy]'
@@ -99,7 +99,9 @@ The key is `chat_template_kwargs` (note the `_kwargs` suffix — `chat_template_
 
 The proxy is what turns "one model at a fixed port" into "named aliases your clients can address." Phase 1 wires the three local aliases; phase 2 adds Anthropic/OpenAI cloud routing on top of the same config.
 
-Create [`litellm-config.yaml`](./litellm-config.yaml) (gitignored if it contains secrets; here it doesn't):
+The config lives at **[`phases-apple/phase-1/litellm-config.yaml`](./litellm-config.yaml)** — committed in the repo, no secrets, no need to create it yourself. When phase 2 adds cloud backends, their `api_key` fields read from env vars via direnv (`os.environ/ANTHROPIC_API_KEY` etc.), so the file stays committable.
+
+For reference, the starter contents:
 
 ```yaml
 model_list:
@@ -129,7 +131,7 @@ All three aliases point at the same port 8080 because `model-switch.sh` only eve
 
 (Later phases that wire cloud backends will get a real model-to-port mapping; for phase 1 this is intentionally simple.)
 
-Launch the proxy:
+Launch the proxy (from the repo root — all SOV commands run from there, per the [working-directory rule](../README.md#operational-discipline)):
 
 ```bash
 litellm --config phases-apple/phase-1/litellm-config.yaml --port 4000
