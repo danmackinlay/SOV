@@ -134,12 +134,20 @@ All three aliases point at the same port 8080 because `model-switch.sh` only eve
 Launch the proxy (from the repo root — all SOV commands run from there, per the [working-directory rule](../README.md#operational-discipline)):
 
 ```bash
-litellm --config phases-apple/phase-1/litellm-config.yaml --port 4000
+litellm --config phases-apple/phase-1/litellm-config.yaml --host 127.0.0.1 --port 4000
 ```
 
 You now have an OpenAI-compatible endpoint at `http://127.0.0.1:4000/v1` that knows three model names.
 
-**Security discipline** (from [ADR 0006](../../docs/decisions/0006-secret-handling.md) and the [LiteLLM CVE history](../README.md#operational-discipline)): never expose this port to anything but `127.0.0.1`. Pin LiteLLM ≥ 1.83.7. Don't add a `--host 0.0.0.0` flag.
+**Security discipline — `--host 127.0.0.1` is mandatory, not optional.** LiteLLM defaults to `--host 0.0.0.0` (all interfaces); on a laptop joined to a wifi network that exposes your proxy — and through it, your locally-loaded model — to anyone else on the network. Always pass `--host 127.0.0.1` explicitly. (From [ADR 0006](../../docs/decisions/0006-secret-handling.md) and the [LiteLLM CVE history](../README.md#operational-discipline): pin LiteLLM ≥ 1.83.7, never internet-exposed.)
+
+Sanity-check that you're bound to loopback only, not all interfaces:
+
+```bash
+lsof -nP -iTCP:4000 -sTCP:LISTEN
+# Expect a single line with "127.0.0.1:4000". If it shows "*:4000" you're
+# on 0.0.0.0 — kill the proxy and restart with --host 127.0.0.1.
+```
 
 ## Reconfigure Jan as a thin client
 
