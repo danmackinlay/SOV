@@ -139,15 +139,23 @@ litellm --config phases-apple/phase-1/litellm-config.yaml --host 127.0.0.1 --por
 
 You now have an OpenAI-compatible endpoint at `http://127.0.0.1:4000/v1` that knows three model names.
 
-**Security discipline — `--host 127.0.0.1` is mandatory, not optional.** LiteLLM defaults to `--host 0.0.0.0` (all interfaces); on a laptop joined to a wifi network that exposes your proxy — and through it, your locally-loaded model — to anyone else on the network. Always pass `--host 127.0.0.1` explicitly. (From [ADR 0006](../../docs/decisions/0006-secret-handling.md) and the [LiteLLM CVE history](../README.md#operational-discipline): pin LiteLLM ≥ 1.83.7, never internet-exposed.)
+**Security: LiteLLM defaults to `--host 0.0.0.0` (all interfaces), exposing your proxy to anyone on the same wifi.** We defend in two layers:
 
-Sanity-check that you're bound to loopback only, not all interfaces:
+1. **Env-var default via direnv** — [`phases-apple/.envrc`](../.envrc) sets `HOST=127.0.0.1`, which LiteLLM reads via its `envvar="HOST"` Click option. Any `litellm` invocation with cwd anywhere under `phases-apple/` inherits the safe bind automatically. **From the repo root**, this `.envrc` is *not* loaded; mirror the export in your `.envrc.local` for the same protection: `export HOST=127.0.0.1`.
+2. **Explicit `--host 127.0.0.1` on the CLI** — overrides any env-var state, works regardless of cwd, self-documents in the command. The canonical command above keeps it for clarity; it's redundant with the env var when the env var is set, but free to leave in.
+
+There is no YAML-config equivalent — `--host` is a CLI/env var only.
+
+Sanity-check the bind:
 
 ```bash
 lsof -nP -iTCP:4000 -sTCP:LISTEN
 # Expect a single line with "127.0.0.1:4000". If it shows "*:4000" you're
-# on 0.0.0.0 — kill the proxy and restart with --host 127.0.0.1.
+# on 0.0.0.0 — kill the proxy and restart with --host 127.0.0.1 (or fix
+# your .envrc.local).
 ```
+
+(From [ADR 0006](../../docs/decisions/0006-secret-handling.md) and the [LiteLLM CVE history](../README.md#operational-discipline): pin LiteLLM ≥ 1.83.7 by digest, never internet-exposed.)
 
 ## Reconfigure Jan as a thin client
 

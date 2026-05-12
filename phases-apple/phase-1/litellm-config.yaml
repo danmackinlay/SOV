@@ -5,13 +5,18 @@
 # via direnv (`os.environ/ANTHROPIC_API_KEY`), so this file stays
 # committable.
 #
-# Run from the repo root. --host 127.0.0.1 is mandatory: LiteLLM
-# defaults to 0.0.0.0, which would expose the proxy to anyone on your
-# wifi. There is no YAML equivalent; the CLI flag is the only way to
-# bind loopback-only.
+# Run from the repo root.
 #
 #   litellm --config phases-apple/phase-1/litellm-config.yaml \
 #           --host 127.0.0.1 --port 4000
+#
+# Why --host 127.0.0.1: LiteLLM defaults to 0.0.0.0 (all interfaces),
+# which would expose the proxy to anyone on the same wifi. The
+# committed phases-apple/.envrc sets HOST=127.0.0.1 via direnv, which
+# LiteLLM reads via its `envvar="HOST"` Click option, so cwd under
+# phases-apple/ is automatically safe. At repo-root cwd direnv loads
+# only the root .envrc, so we keep --host on the canonical CLI for
+# belt-and-braces. There is no YAML-config equivalent for host binding.
 #
 # All three local-* aliases point at the same port 8080. bin/model-switch.sh
 # is the thing that controls which actual model is loaded there; this proxy
