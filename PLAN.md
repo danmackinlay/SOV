@@ -1,5 +1,7 @@
 # Plan: Sovereign-LLM Audition
 
+> **SOV Outlasts Vendors.**
+
 This document describes the engineering plan for the SOV repo: how we get from "no infrastructure" to "the cooperative has tried the experience on rented GPUs and decided whether to buy hardware."
 
 It is the live plan. Revise it in place when reality diverges; mark superseded sections rather than deleting them so we keep an audit trail.

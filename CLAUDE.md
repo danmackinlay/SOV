@@ -1,5 +1,7 @@
 # SOV — agent context
 
+> **SOV Outlasts Vendors.** — the project motto. The whole repo exists to make this true.
+
 This file is shared context for Claude Code (or any agent) working in the SOV repo. It is the project's collective memory; treat it as authoritative for "what are we doing here, and how."
 
 ## Project in one paragraph

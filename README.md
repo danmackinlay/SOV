@@ -1,5 +1,7 @@
 # SOV
 
+> **SOV Outlasts Vendors.**
+
 Prototype work for an Australian sovereign-LLM cooperative — a "try before you buy" audition of the software stack that would eventually run on owned hardware.
 
 We're building in the open. Three initial collaborators are scoping it; the repo is public so other Australian groups thinking about the same problem can find us, fork freely, and (eventually) run their own audition. We are not yet at a stage where we accept code contributions from outside collaborators.
