@@ -141,6 +141,59 @@ The relevant `hf` subcommands (current as of 2026; the old `huggingface-cli` ali
 
 To move the cache off the boot volume (large models on an external SSD, say), set `HF_HOME` in your `.envrc.local` — direnv will export it to every `hf` and `mlx_lm` process automatically.
 
+### Time Machine / backup exclusions
+
+Model weights are the single biggest way this stack will balloon a Time Machine (or any incremental) backup. They're also the most pointless thing to back up — every byte is re-downloadable. Exclude the model/cache directories before your first backup after bootstrapping.
+
+Sizes below are indicative (from one 128 GB Mac mid-phase-1); yours will differ. The "reconstruct via" column is why none of this is worth backup space.
+
+| Path | Typical size | What | Reconstruct via |
+|---|---|---|---|
+| `~/.cache/huggingface` | 20 GB+ and growing | mlx-lm / `hf download` model cache — the big one | `hf download` |
+| `~/.cache/uv` | 10–20 GB | uv build/package cache | re-resolved on next `uv` run |
+| `~/.ollama/models` | grows with use | Ollama GGUF blobs (embeddings etc.) | `ollama pull` |
+| `~/.lmstudio` | several GB | LM Studio models + runtime backends (if installed) | re-download in app |
+| `~/Library/Application Support/Jan/data/llamacpp/models` | several GB | Jan's Cortex/GGUF models | re-download in Jan |
+| `~/Library/Application Support/Jan/data/mlx/models` | grows if Jan-as-MLX used | Jan's native-MLX models | re-download in Jan |
+| `~/.local/share/uv` | 2–3 GB | installed uv tools (mlx-lm, litellm, aider…) | re-run the `uv tool install` lines |
+
+`Jan` and `jan` under Application Support are the **same directory** (case-insensitive APFS — same inode), not two; don't double-count or double-exclude.
+
+Apply as **sticky path exclusions** (`-p`) so they survive the tools deleting and recreating these dirs — a plain `tmutil addexclusion` sets an xattr that's lost on recreate, which is exactly what caches do:
+
+```bash
+sudo tmutil addexclusion -p ~/.cache/huggingface
+sudo tmutil addexclusion -p ~/.cache/uv
+sudo tmutil addexclusion -p ~/.ollama/models
+sudo tmutil addexclusion -p ~/.lmstudio
+sudo tmutil addexclusion -p "$HOME/Library/Application Support/Jan/data/llamacpp/models"
+sudo tmutil addexclusion -p "$HOME/Library/Application Support/Jan/data/mlx/models"
+# optional — only if you accept re-running the uv tool installs after a restore:
+sudo tmutil addexclusion -p ~/.local/share/uv
+```
+
+Verify:
+
+```bash
+for p in ~/.cache/huggingface ~/.cache/uv ~/.ollama/models ~/.lmstudio \
+  "$HOME/Library/Application Support/Jan/data/llamacpp/models"; do
+  tmutil isexcluded "$p"
+done
+```
+
+Judgement calls:
+
+- **Jan: exclude the two `*/models` subdirs, not the whole `Jan/` dir.** The parent also holds conversation history and settings — small and worth keeping. If you don't care about Jan chat history, excluding `"$HOME/Library/Application Support/Jan"` wholesale is simpler.
+- **LM Studio: exclude `~/.lmstudio` wholesale.** None of it is precious if LM Studio isn't a primary client (and on this track it isn't — see [Why Jan as a thin client](#why-jan-as-a-thin-client-not-as-a-full-stack)).
+- **`~/.cache/huggingface` is the win** — the one that actually matters; everything else is rounding error by comparison.
+
+#### Image-gen tools (phase 4 — paths confirmed when installed)
+
+Not on the critical path until [phase 4](#sub-phases), but they balloon backups harder than the LLM side (Flux/SDXL/video weights run to tens of GB):
+
+- **Draw Things** (sandboxed Mac App Store app): models at `~/Library/Containers/com.liuliu.draw-things/Data/Documents/Models` ([Draw Things docs](https://docs.drawthings.ai/documentation/documentation/2.models)). Clean single-path exclusion — *unless* you've used Draw Things' [External Model Folder Setting](https://wiki.drawthings.ai/wiki/External_Model_Folder_Setting) to relocate models (common on a high-RAM Mac running an external SSD), in which case exclude wherever you pointed it.
+- **ComfyUI Desktop**: app state (config + logs, ~MB, *keep these*) is at `~/Library/Application Support/ComfyUI` and `~/Library/Logs/ComfyUI`. **Weights have no fixed default** — the install directory is chosen in the setup wizard (commonly `~/Documents/ComfyUI` but not forced; `brew install comfyui` differs again). Find the real path via the app's **Help → Open Folder → Open Model Folder**, or check `~/Library/Application Support/ComfyUI/config.json` / `extra_models_config.yaml`. Exclude `<that-install-dir>/models`. This one can't be blind-scripted; confirm per-install. The phase-4 doc will pin the exact exclusion once ComfyUI is actually in the track.
+
 ## Open questions
 
 - **MCP-based RAG inside Jan vs. dedicated AnythingLLM.** Phase 2 uses AnythingLLM for time-to-working. A later phase may swap to a Zotero MCP server feeding Jan directly, which is more SOV-spirit (composable parts). Decision deferred to phase-2 retro.
