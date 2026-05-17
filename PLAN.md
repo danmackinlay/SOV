@@ -59,7 +59,7 @@ Full ADRs are in [`docs/decisions/`](docs/decisions/). One-line summaries:
 | User-facing surface | OpenAI-compatible endpoint + LibreChat; Jan as recommended desktop client | OpenAI compat is the universal interface; LibreChat is MIT, MCP-aligned, supports conversation forking. Revised from Open WebUI on 2026-05-12 — see ADR 0003 §Revision. |
 | Auth (audition) | Ephemeral pod URLs + shared API key + runtime cap | Cost-bounded blast radius even if URL leaks. |
 | Orchestration | `docker run` at phase 0; Docker Compose from phase 1 | Compose is the floor for multi-service. Heterogeneous routing via LiteLLM proxy (pinned ≥1.83.7, never internet-exposed — see phase 2). |
-| Models | Qwen3.5-35B-A3B → Qwen3.5-122B-A10B (FP8) → de-censored + reasoning sidecar → DGX | Each phase exercises more of the stack at higher cost; can stop at any phase. |
+| Models | Qwen3.5-35B-A3B → Qwen3.5-122B-A10B (FP8) → de-censored + reasoning sidecar → DGX | Each phase exercises more of the stack at higher cost; can stop at any phase. DeepSeek V4-Flash enters the phase-1 bake-off; its sparse attention reshapes the concurrency maths — see [ADR 0007](docs/decisions/0007-deepseek-v4-and-the-concurrency-consequence.md). |
 | Decensoring | Abliteration only at this stage; DPO deferred | Abliteration is ~$50–$100 USD; DPO is $1.5–4k AUD and only earns its keep with a committed cooperative. |
 
 ---
@@ -202,6 +202,7 @@ This is the phase where we generate the evidence for or against the hardware pur
 3. **Agentic round-trip** — measure the full latency of one tool-calling cycle (prompt → tool call → tool result → response) on at least one realistic agentic task.
 4. **vLLM vs. SGLang** side-by-side on the same workload. Break results down by workload class — unique-prompt vs. prefix-heavy/multi-turn — since SGLang's RadixAttention advantage is workload-dependent. The 2026 public numbers say the gap is large on the workloads we care about (multi-turn agentic, DeepSeek-class sidecar models); a flat ">15% threshold" is no longer the right framing. See [ADR 0002](docs/decisions/0002-inference-engine.md) for the revised re-evaluation criteria.
 5. **FP8 vs AWQ 4-bit** side-by-side on the same model, with throughput and accuracy on a held-out task suite. This is the live quantization trade-off in 2026 — record the answer for SOV's workload, not just the general claim.
+6. **DeepSeek V4-Flash vs Qwen3.5-122B-A10B** as a workhorse arm. The interesting axis is concurrency under long contexts: V4's sparse attention changes the KV-cache budget by roughly an order of magnitude — measure it against the worked arithmetic in [ADR 0007](docs/decisions/0007-deepseek-v4-and-the-concurrency-consequence.md) and replace the illustrative numbers there with the real ones.
 
 Output: a `phases-cloud/phase-1-full-audition/benchmarks.md` with results, raw data, and a recommendation.
 
@@ -353,7 +354,7 @@ These apply to every phase.
 These are real questions we have not yet answered. Record the resolution here when we make a call.
 
 1. **Where do we store the abliterated weights?** Options: HuggingFace private repo, an S3-equivalent bucket, or just regenerate from the script each time. Cost vs. convenience trade-off. Resolve before phase 2.
-2. **Does Claude Code's API mode work via an OpenAI-to-Anthropic shim?** Investigate before phase 2 workstream B; it would be a high-impact demo if so.
+2. **Does Claude Code's API mode work via an OpenAI-to-Anthropic shim?** Investigate before phase 2 workstream B; it would be a high-impact demo if so. DeepSeek V4 ships a native Anthropic API, which may remove the need for a shim entirely — see [ADR 0007](docs/decisions/0007-deepseek-v4-and-the-concurrency-consequence.md).
 3. **Is the Australian-cloud-purity tension worth surfacing in the audition itself, or only in the eventual recruitment doc?** Default: surface in [`docs/decisions/0001-cloud-providers.md`](docs/decisions/) and let it inform the recruitment narrative; don't change audition behaviour.
 4. **What's the right license for this repo?** Probably MIT or Apache-2.0 to encourage forking by other collectives. Resolve before going public.
 5. **Phase 3 hosting venue (home / office / colo).** Defer until phase 2 results inform reliability requirements.
