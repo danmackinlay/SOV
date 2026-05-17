@@ -4,14 +4,19 @@
 
 Prototype work for an Australian sovereign-LLM cooperative — a "try before you buy" audition of the software stack that would eventually run on owned hardware.
 
-We're building in the open. Three initial collaborators are scoping it; the repo is public so other Australian groups thinking about the same problem can find us, fork freely, and (eventually) run their own audition. We are not yet at a stage where we accept code contributions from outside collaborators.
+We're building in the open.
+The initial collaborators are scoping it; the repo is public so other Australian groups thinking about the same problem can find us, fork freely, and (eventually) run their own audition.
+We are not yet at a stage where we accept code contributions from outside collaborators.
+
+This repo will be most LLM-agent built; we are rapidly auditioning technology here for now and drilling down later.
 
 ## Where to start
 
+0. **Interested? [Sign up for updates](https://woozy-page-39c.notion.site/32d398af2ab0805293a9dfb1561b4bdf?pvs=105).**
 1. **Why we're doing this** — read the rationale, two posts on Dan's blog:
-   - [The institutional/geopolitical case](https://danmackinlay.name/notebook/aus_sovereign_llm.html)
-   - [The technical companion](https://danmackinlay.name/notebook/aus_sovereign_llm_technical.html)
-   - See [`docs/rationale/`](docs/rationale/) for a short index pointing at these. We don't mirror them in-repo, to avoid drift.
+   - The [institutional/geopolitical case](https://danmackinlay.name/notebook/aus_sovereign_llm.html)
+   - The [technical sktch](https://danmackinlay.name/notebook/aus_sovereign_llm_technical.html) (which we hope to be superceded by this)
+   - See [`docs/rationale/`](docs/rationale/) for the executive summary.
 
 2. **What we're building** — read [`PLAN.md`](PLAN.md). That's the live plan, the architecture decisions, and the phased roadmap.
 
@@ -19,13 +24,12 @@ We're building in the open. Three initial collaborators are scoping it; the repo
 
 ## Status
 
-Early. Currently in **planning**. No phase has shipped yet.
-
 See [`PLAN.md`](PLAN.md) for the current phase, exit criteria, and what we're working on next.
 
 ## Contributing
 
-We're an early, three-person project — please don't open PRs without checking in first. We may not be able to review them, and we don't want to mislead anyone about engagement bandwidth.
+We're an early, small-collective project — please don't open PRs without checking in first.
+We may not be able to review them, and we don't want to mislead anyone about engagement bandwidth.
 
 What's welcome:
 
