@@ -29,3 +29,6 @@ scratch/
 
 # Local agent state (Claude Code per-user settings/state — never shared)
 .claude/
+
+# Scraped source material (firecrawl skill cache — regenerable, goes stale; cite figures in ADRs/PLAN instead)
+.firecrawl/
