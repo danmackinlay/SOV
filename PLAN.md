@@ -244,6 +244,8 @@ This phase has three independent workstreams that can run in parallel.
 
 Apply abliteration to Qwen3.5-122B-A10B using **[Heretic](https://github.com/p-e-w/heretic)** (actively maintained as of May 2026, explicit Qwen3.5 support, 3000+ community-produced models). [llm-abliteration](https://github.com/jim-plus/llm-abliteration) is the older-architecture fallback (tested through Qwen2.5/Mistral-Nemo/Gemma-3; no documented Qwen3.5 coverage). Run on rented 8× H100 for 2–4 hours.
 
+**Architecture-lag risk if the phase-1 bake-off picks V4-Flash instead of Qwen3.5-122B-A10B** (see [ADR 0007](docs/decisions/0007-deepseek-v4-and-the-concurrency-consequence.md)): Heretic does *not* yet have mature V4-Flash support (issue #310 open and unresolved as of May 2026); the only community-abliterated V4-Flash is GGUF-for-llama.cpp, so this workstream would still need to produce a vLLM-servable FP8 abliterated build itself. Do not assume Qwen-level abliteration maturity for V4. The abliteration target is settled by the phase-1 model recommendation; this workstream's risk profile changes materially depending on which way that lands.
+
 **Deliverables:**
 - [`phases-cloud/phase-2-decensor-agentic/abliteration/run.sh`](phases-cloud/) — automated pipeline
 - Pre-and-post evaluation against the [Shisa.AI Qwen2 censorship taxonomy](https://shisa.ai/posts/qwen2-chinese-llm-censorship-analysis/) in both English and Chinese, results checked into the repo
@@ -258,7 +260,7 @@ A runnable demo where each collaborator can experience an agent doing real-ish w
 **Candidate POCs** (we pick one or two; do not build all):
 
 1. **Aider** pointed at the SOV endpoint, doing a small refactor on a sample repo. Lowest implementation cost; immediate signal on coding-agent feel.
-2. **Claude Code in API mode** with `ANTHROPIC_BASE_URL` redirected to the SOV endpoint via an OpenAI-to-Anthropic translation shim. Highest "wow factor" if it works; significant integration cost (Claude Code expects Anthropic-format API).
+2. **Claude Code in API mode** with `ANTHROPIC_BASE_URL` redirected to the SOV endpoint via an OpenAI-to-Anthropic translation shim. Highest "wow factor" if it works; significant integration cost (Claude Code expects Anthropic-format API). **If V4-Flash is the served model, the shim may be unnecessary** — V4 ships a native Anthropic-format API ([ADR 0007](docs/decisions/0007-deepseek-v4-and-the-concurrency-consequence.md), and §9 open question 2), which would collapse this candidate's main integration cost. Confirm empirically before building the shim.
 3. **A small custom Python agent** that does something concrete: read a CSV, do a multi-step research task, write a report. Maximum control; least transferable.
 
 **Default:** Aider as the workhorse POC plus a 50-line custom Python agent that exercises tool calling end-to-end. Claude-Code-in-API-mode is a stretch goal.
@@ -277,6 +279,8 @@ Add a [LiteLLM](https://github.com/BerriAI/litellm) proxy in front of the infere
 2. **[DeepSeek-R1-0528-Qwen3-8B](https://huggingface.co/deepseek-ai/DeepSeek-R1-0528-Qwen3-8B)** — fast/cheap "sanity-check" or "pre-filter" thinking model. The 8B distill ties Qwen3-235B-Thinking on AIME-2024, runs on a fractional H100, and is the current sweet spot for the small-reasoning slot. (We can swap to a Qwen3.5 thinking variant once an mlx-compatible port lands, for parity with the apple-track `local-math`.)
 
 LiteLLM presents a single OpenAI-compatible endpoint. Clients pick a model by name; LiteLLM routes to the right backend.
+
+**Contingency if V4-Flash is the workhorse** (see [ADR 0007](docs/decisions/0007-deepseek-v4-and-the-concurrency-consequence.md) decision 4): V4-Flash's multi-tier thinking modes (Non-think / Think-High / Think-Max) may collapse the workhorse-vs-reasoning-sidecar split — a single model covers both roles. Do **not** drop to a one-backend setup if that happens; repurpose the second slot to a cheap classifier/pre-filter instead. The two-backend demo is the DGX workhorse+sidecar-pattern rehearsal and is worth keeping regardless of whether the second model is a reasoner or a classifier.
 
 This sets up the architecture pattern we'd want on the eventual DGX setup: workhorse + sidecar(s).
 
@@ -345,6 +349,7 @@ These apply to every phase.
 ### Reproducibility
 
 - Every script pins versions: vLLM image tag, model revision, RunPod pod template ID. No `:latest` tags except where explicitly marked "track upstream". LiteLLM (phase 2) is pinned **by digest** rather than by tag — see CVE-2026-42208 and the March 2026 PyPI supply-chain compromise for why.
+- **If V4-Flash is served, vLLM is pinned to a known-good *commit*, not just a release tag.** Multiple May-2026 reports of V4 working then breaking across vLLM commits (NVIDIA dev forum); a release tag is too coarse for the `deepseek_v4` path. This sharpens the rule above for that one model; it is not a separate policy. See [ADR 0007](docs/decisions/0007-deepseek-v4-and-the-concurrency-consequence.md) §Consequences.
 - The Compose file is the contract; updating it requires updating the phase doc that references it.
 
 ---
