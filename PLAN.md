@@ -385,7 +385,7 @@ flowchart TB
   stack -.benchmarked against.-> alt
 ```
 
-The whole point of standardising on vLLM + Docker Compose is that the cloud-to-owned-hardware move is a config change, not a rewrite. **At a high level**, this phase will:
+At a high level, this phase will:
 
 1. Place the order through an Australian NVIDIA partner. As of May 2026, NVIDIA-branded DGX Station is **not shipping to AU** — [XENON](https://xenon.com.au) sells the GB300-equivalent OEM workstations (MSI WS300 ~AU$130k, Gigabyte W775) instead. Dell and MMT have similar OEM channels. Lead time: months.
 2. Pick the hosting venue: home, shared office, or colo. The rationale doc has a full discussion; the network reliability section will drive the call.

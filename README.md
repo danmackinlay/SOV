@@ -10,9 +10,9 @@ We are not yet at a stage where we accept code contributions from outside collab
 
 This repo will be most LLM-agent built; we are rapidly auditioning technology here for now and drilling down later.
 
-## The end-state we're auditioning toward
+## End goal
 
-This is the shape of the thing if it all works — a small Australian collective owning the metal, running a model nobody can switch off, no vendor in the loop. (Sketch only; the audition exists to test whether this is worth building.)
+If the audition succeeds, the target is a small Australian collective that owns a DGX-class workstation, runs a de-censored open-weight model on it, and serves inference to its members — with no commercial vendor in the dependency chain. The diagram below sketches that target. It is not a commitment: the audition exists to test whether it is worth building.
 
 ```mermaid
 flowchart TB
