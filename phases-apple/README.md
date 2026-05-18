@@ -124,6 +124,30 @@ The MLX-in-Jan path is a legitimate alternative for someone doing laptop-only LL
 
 **One concrete friction to watch for in either posture:** Jan launches its internal runtime(s) on startup whether or not you're using them. The "spinner waiting for a model server" you may see on first launch is Cortex / the MLX backend starting up, not Jan failing to connect to your external endpoint. On a 128 GB box it's invisible; on tighter machines you may want to disable internal-runtime auto-start in **Settings → Local API Server** so RAM isn't pre-allocated to runtimes you don't use. Don't let Jan auto-download models either — use `hf download` so the cache discipline below applies and `bin/model-status.sh` reflects reality.
 
+## Why runtime choice changes "MLX speed"
+
+A common confusion: "the same MLX model runs at different tok/s in Ollama vs LM Studio vs Jan vs `mlx_lm.server` — why?" Because **a model file is inert weights; speed is a property of the stack that runs it.** The weights are maybe 10% of the story. Observed throughput is roughly:
+
+```
+tok/s ≈ f( which engine, engine version, quant variant,
+           inference features, runtime/IPC overhead,
+           generation defaults, memory headroom )
+```
+
+| Layer | Why it moves the number |
+|---|---|
+| **Engine identity** | Biggest one. [Ollama](https://github.com/ollama/ollama) is **not an MLX runtime** — it runs **GGUF** via [llama.cpp](https://github.com/ggml-org/llama.cpp)'s Metal kernels, an independently-written engine from [MLX](https://github.com/ml-explore/mlx). Comparing Ollama to an MLX runtime is GGUF-vs-MLX, not a fair "same model" test. [LM Studio](https://github.com/lmstudio-ai/mlx-engine) and [Jan ≥0.7.7](https://github.com/janhq/jan/releases/tag/v0.7.7) ship *both* a llama.cpp engine and an MLX engine; which one runs depends on the model you pick. |
+| **Engine version skew** | MLX kernels (fused attention, faster quant matmul) improve monthly. Each app vendors a *pinned* `mlx`/`mlx-lm`; a 3-month-old bundled MLX is materially slower than current for the identical model. `mlx_lm.server` lets you `uv tool upgrade mlx-lm` — you control this. |
+| **Quant variant** | "[MLX 4-bit](https://huggingface.co/docs/hub/en/mlx)" is underspecified: group size (32/64/128), which tensors are quantized (embeddings? `lm_head`?). Two apps' "4-bit" of the same model can differ in memory traffic → speed (and quality). Some apps silently re-quantize on import. |
+| **Inference features** | Speculative decoding (draft model) = 1.5–3× on the same target. Prompt/KV-cache reuse vs recompute-every-turn = large multi-turn divergence. KV-cache quantization, max-context allocation. |
+| **Runtime / IPC overhead** | Per-token, a fast MoE (Qwen3.5-A3B, 3 B active) is so cheap that *wrapper overhead dominates*. `mlx_lm.server`: tight Python loop + one loopback HTTP hop. LM Studio: lean managed subprocess. Jan: Electron ↔ backend subprocess ↔ OpenAI-compat HTTP, more layers. Gap *widens* on small/fast models, *shrinks* on big ones (compute dominates). |
+| **Generation defaults** | Context length, sampler complexity (`min_p`+`top_k`+repetition-penalty is more per-token work than greedy), batch size, fused-attention on/off. Apps ship different invisible defaults. |
+| **Memory headroom** | MLX uses unified memory; cross into pressure and macOS swaps → *cliff*, not slope (10× slowdowns). Two apps sizing KV caches differently can land on opposite sides. This is what `bin/model-status.sh`'s swap canary and the `mactop` rule above guard against. |
+
+**Why this justifies `mlx_lm.server` for the SOV apple track:** version you control (skew), quant you chose via `hf download` (no silent re-quant), one documented HTTP hop (predictable overhead), explicit defaults (in the curl/config, not buried in a settings panel), and `model-status.sh` + `mactop` observability (which side of the memory cliff). The apps are *easier*; `mlx_lm.server` is *legible and reproducible* — the right trade for a track whose point is mirroring a controlled stack.
+
+References: [MLX](https://github.com/ml-explore/mlx) · [mlx-lm](https://github.com/ml-explore/mlx-lm) ([SERVER.md](https://github.com/ml-explore/mlx-lm/blob/main/mlx_lm/SERVER.md)) · [llama.cpp](https://github.com/ggml-org/llama.cpp) · [LM Studio mlx-engine](https://github.com/lmstudio-ai/mlx-engine) · [LM Studio API docs](https://lmstudio.ai/docs/app/api) · [Jan 0.7.7 release notes](https://github.com/janhq/jan/releases/tag/v0.7.7) · [Ollama](https://github.com/ollama/ollama) · [HF MLX format](https://huggingface.co/docs/hub/en/mlx).
+
 ## Cleanup & disk management
 
 The Hugging Face cache at `~/.cache/huggingface/` accumulates relentlessly — every `hf download` lands a new revision, MoE weight shards are big, nothing is ever auto-removed. Budget on disk hygiene every few weeks.
