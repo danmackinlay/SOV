@@ -97,6 +97,24 @@ Some work doesn't fit the cloud-audition phase numbering but is still under SOV'
 
 **Goal:** prove the full stack runs end-to-end on a single GPU with a small model. We are not testing model quality here; we are testing that we can spin up a pod, serve an OpenAI-compatible API, hit it from LibreChat, hit it from a collaborator's machine, and tear it down with a printable cost.
 
+```mermaid
+flowchart TB
+  user["Collaborator<br/>browser + curl"]
+  launch["launch.sh<br/>cost cap + self-destruct"]
+  subgraph pod["RunPod pod — 1x H100 80GB (or vast.ai)"]
+    proxy["RunPod proxy URL<br/>random hostname = the secret"]
+    lc["LibreChat<br/>docker run, single pre-seeded admin"]
+    vllm["vllm/vllm-openai (pinned tag)<br/>Qwen3.5-35B-A3B FP8"]
+  end
+  launch -->|spins up / tears down| pod
+  user -->|shared API key| proxy
+  proxy --> lc
+  proxy -->|OpenAI-compatible API| vllm
+  lc --> vllm
+```
+
+Two bare `docker run` containers, no Compose yet — the whole point of phase 0 is that this minimal shape works before we add services.
+
 ### Hardware
 
 - **Primary:** 1× H100 80GB on **RunPod**. ~$2.40–$3.00 USD/hour (PCIe to SXM) as of May 2026.
@@ -166,6 +184,27 @@ A collaborator who has never seen the repo can:
 ## 5. Phase 1 — full audition
 
 **Goal:** run the actual target model under realistic load and produce the data needed to decide whether the hardware purchase makes sense.
+
+```mermaid
+flowchart TB
+  user["Collaborators<br/>browser + agentic clients"]
+  subgraph pod["Lambda / RunPod multi-GPU pod — 4-8x H100 (or 3x H200)"]
+    direction TB
+    caddy["Caddy reverse proxy<br/>shared-key auth + TLS"]
+    lc["LibreChat<br/>MCP-aligned, MIT"]
+    vllm["vllm/vllm-openai<br/>Qwen3.5-122B-A10B FP8<br/>tensor-parallel across GPUs"]
+    sglang["sglang sidecar<br/>(optional, benchmarking only)"]
+    bench["benchmarks/<br/>latency · throughput · agentic · FP8-vs-AWQ · vLLM-vs-SGLang"]
+  end
+  user -->|shared API key| caddy
+  caddy --> lc
+  caddy -->|OpenAI-compatible API| vllm
+  lc --> vllm
+  bench --> vllm
+  bench -.same workload.-> sglang
+```
+
+`docker compose up` orchestrates everything from this phase onward — the Compose file is the contract for what services exist.
 
 ### Hardware
 
@@ -240,6 +279,28 @@ If we restrict to 4× H100 (or 3× H200) and tight session discipline, this drop
 
 This phase has three independent workstreams that can run in parallel.
 
+```mermaid
+flowchart TB
+  user["Collaborators · Aider · custom Python agent"]
+  ablit["Workstream A: Heretic abliteration<br/>(offline, 8x H100, 2-4h)"]
+  subgraph pod["Lambda / RunPod pod — docker compose up"]
+    caddy["Caddy reverse proxy<br/>shared-key auth + TLS"]
+    lc["LibreChat"]
+    litellm["LiteLLM proxy<br/>pinned by digest, >=1.83.7<br/>never internet-exposed"]
+    workhorse["vLLM workhorse<br/>Qwen3.5-122B-A10B (abliterated)"]
+    sidecar["vLLM sidecar<br/>DeepSeek-R1-0528-Qwen3-8B<br/>(fast reasoning / pre-filter)"]
+  end
+  ablit -->|abliterated weights| workhorse
+  user -->|shared API key| caddy
+  caddy --> lc
+  caddy --> litellm
+  lc --> litellm
+  litellm -->|route by model name| workhorse
+  litellm -->|route by model name| sidecar
+```
+
+Workstream A produces the weights; Workstream B is the agentic clients on the left; Workstream C is the LiteLLM routing layer. The workhorse + sidecar split is the DGX pattern rehearsal — see [ADR 0007](docs/decisions/0007-deepseek-v4-and-the-concurrency-consequence.md) for the V4-Flash contingency.
+
 ### Workstream A: Abliteration
 
 Apply abliteration to Qwen3.5-122B-A10B using **[Heretic](https://github.com/p-e-w/heretic)** (actively maintained as of May 2026, explicit Qwen3.5 support, 3000+ community-produced models). [llm-abliteration](https://github.com/jim-plus/llm-abliteration) is the older-architecture fallback (tested through Qwen2.5/Mistral-Nemo/Gemma-3; no documented Qwen3.5 coverage). Run on rented 8× H100 for 2–4 hours.
@@ -311,7 +372,20 @@ This is gated on:
 - Sufficient member commitment to fund the purchase.
 - A go-recommendation from phases 1 and 2.
 
-**At a high level**, this phase will:
+```mermaid
+flowchart TB
+  members["Cooperative members<br/>LibreChat (hosted) · Jan (desktop) · agentic clients"]
+  subgraph venue["Hosting venue — home / office / colo (TBD, AU)"]
+    subgraph dgx["Owned GB300-class workstation (XENON MSI WS300 / Gigabyte W775)"]
+      stack["Same Compose stack, migrated as a config change:<br/>Caddy + LibreChat + LiteLLM + vLLM workhorse + sidecar"]
+    end
+    alt["Evaluated at migration, not default:<br/>NVIDIA Dynamo 1.0 / NIM"]
+  end
+  members -->|members' keys| stack
+  stack -.benchmarked against.-> alt
+```
+
+The whole point of standardising on vLLM + Docker Compose is that the cloud-to-owned-hardware move is a config change, not a rewrite. **At a high level**, this phase will:
 
 1. Place the order through an Australian NVIDIA partner. As of May 2026, NVIDIA-branded DGX Station is **not shipping to AU** — [XENON](https://xenon.com.au) sells the GB300-equivalent OEM workstations (MSI WS300 ~AU$130k, Gigabyte W775) instead. Dell and MMT have similar OEM channels. Lead time: months.
 2. Pick the hosting venue: home, shared office, or colo. The rationale doc has a full discussion; the network reliability section will drive the call.

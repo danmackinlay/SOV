@@ -10,6 +10,25 @@ We are not yet at a stage where we accept code contributions from outside collab
 
 This repo will be most LLM-agent built; we are rapidly auditioning technology here for now and drilling down later.
 
+## The end-state we're auditioning toward
+
+This is the shape of the thing if it all works — a small Australian collective owning the metal, running a model nobody can switch off, no vendor in the loop. (Sketch only; the audition exists to test whether this is worth building.)
+
+```mermaid
+flowchart TB
+  members["Cooperative members (AU)<br/>LibreChat in the browser · Jan on the desktop · agentic tools"]
+  subgraph sov["Owned, in Australia — outlasts vendors"]
+    box["GB300-class DGX workstation<br/>bought once, hosted by the collective"]
+    model["De-censored open-weight model<br/>+ fast reasoning sidecar"]
+    stack["vLLM + LiteLLM + Caddy<br/>OpenAI-compatible endpoint"]
+  end
+  vendors["Commercial LLM vendors"]
+  members -->|members' own keys| stack
+  stack --> model
+  model --> box
+  members -. no dependency .-> vendors
+```
+
 ## Where to start
 
 0. **Interested? [Sign up for updates](https://woozy-page-39c.notion.site/32d398af2ab0805293a9dfb1561b4bdf?pvs=105).**
