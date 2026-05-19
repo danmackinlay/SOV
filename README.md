@@ -11,6 +11,34 @@ We don't promise to reply yet.
 
 This repo will be most LLM-agent built; we are rapidly auditioning technology here for now and drilling down later.
 
+## Threat model
+
+What are your plans if this happens?
+
+> It’s 2028.
+> The Taiwan Strait crisis has been going for six months.
+> Australia’s submarine cables to Asia are damaged—some by mines, some by “accidents”—and the US has requisitioned most of the Pacific satellite bandwidth for military use.
+> Starlink is technically available, but routed through US ground stations under wartime emergency rules; latency is bad and the terms of service now exclude “non-allied commercial AI inference.”
+
+> You’re a freelance engineer.
+> You used to start every morning with Claude helping you plan your work, draft client emails, review code.
+> That stopped working in week two of the crisis.
+> OpenAI is intermittently available, but the API is rate-limited to US customers and the pricing has tripled.
+> The Chinese services—DeepSeek, Qwen’s hosted API—are obviously gone.
+
+> Your friend down the road is in a compute collective.
+> They have a DGX Station in a rack at a colo in Alexandria.
+> It’s running a de-censored Qwen model, nothing fancy, noticeably worse than Claude was.
+> But it’s *there*.
+> It drafts emails.
+> It reviews code.
+> It helps your friend’s small consultancy keep billing while half the industry is paralysed.
+> You ask if you can join.
+> There’s a waiting list.
+
+That's the kind of problem that a compute collective can solve.
+[Background here](https://danmackinlay.name/notebook/aus_sovereign_llm.html).
+
 ## End goal
 
 If the audition succeeds, the target is a small Australian collective that owns a DGX-class workstation, runs a de-censored open-weight model on it, and serves inference to its members — with no commercial vendor in the dependency chain. The diagram below sketches that target.
