@@ -69,6 +69,8 @@ Quant suffixes assume MLX repos in [`mlx-community/`](https://huggingface.co/mlx
 
 **Heavier daily-driver alternative for 64 GB+ Macs:** [Qwen3-Next-80B-A3B-Thinking](https://huggingface.co/Qwen/Qwen3-Next-80B-A3B-Thinking) (3 B active, 80 B total; Sep 2025 release sitting between Qwen3-30B-A3B and Qwen3.5-35B-A3B in the lineage). MLX-4bit port at [`mlx-community/Qwen3-Next-80B-A3B-Thinking-4bit`](https://huggingface.co/mlx-community/Qwen3-Next-80B-A3B-Thinking-4bit), ~45 GB resident. Same per-token speed as the smaller A3B picks (still 3 B active), more quality at the cost of more RAM. Swap into `local-small` if you have headroom and prefer ceiling-of-quality over lightness.
 
+**Long-context-friendly alternative for `local-big` (Mac Studio class, 192 GB+):** [DeepSeek V4-Flash](https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash) (13 B active, 284 B total; April 2026). MLX ports at [`mlx-community/DeepSeek-V4-Flash-4bit`](https://huggingface.co/mlx-community/DeepSeek-V4-Flash-4bit) (~151 GB resident — does *not* fit a 128 GB Mac at this quant) and [`mlx-community/DeepSeek-V4-Flash-2bit-DQ`](https://huggingface.co/mlx-community/DeepSeek-V4-Flash-2bit-DQ) (~96 GB; tight on a 128 GB Mac, dynamic-quantization quality cost unmeasured on this track). The interesting bit is the **DSA sparse attention**: per DeepSeek's tech report a full million-token context costs ~9.6 GB of KV cache instead of the tens of GB a conventional 13 B-active model would use. Practical apple-side implication: long-context workloads (sustained Aider sessions, large RAG queries) hit the KV-cache cliff much later than they would on Qwen3.5-122B-A10B — and laptops are exactly the regime where that matters, because unified-memory budgets are tight. See [ADR 0007](../docs/decisions/0007-deepseek-v4-and-the-concurrency-consequence.md) for the worked arithmetic (cloud-side, illustrative); apple-side numbers will differ proportionally with available memory. Caveats: V4's `deepseek_v4` architecture is fast-moving (ADR 0007 documents vLLM commit-sensitivity; apple-side, this means `uv tool upgrade mlx-lm` before pulling new V4 quants), and per-token speed is slower than Qwen3.5-122B-A10B because more active params (13 B vs 10 B).
+
 > **Model picks rot fast.** This table reflects May 2026. Before bootstrapping a fresh machine, re-check [mlx-community](https://huggingface.co/mlx-community), [Qwen](https://huggingface.co/Qwen) and [deepseek-ai](https://huggingface.co/deepseek-ai) for newer releases. The shape (MoE daily + dense math + larger-MoE stretch) is more durable than the specific repo names; substitute generation-for-generation as the families move.
 
 ## Sub-phases
@@ -80,7 +82,7 @@ Sub-phase directories are created when started, same convention as the main SOV 
 | [`phase-0/`](phase-0/) | Jan-as-full-MLX-stack one-shot: install Jan, chat with a local MLX model, confirm Apple Silicon LLMs work for you. Disposable; no extension to agentic coding. | scoped |
 | [`phase-1/`](phase-1/) | SOV-style composable stack: `mlx_lm.server` + LiteLLM + Jan-as-thin-client + Aider. Unlocks agentic coding. | scoped |
 | `phase-2/` | RAG: Marker + LanceDB + AnythingLLM over a Zotero subset; cloud-fallback aliases in LiteLLM | pending |
-| `phase-3/` | Stretch model + vision: `local-big` and Qwen3-VL-8B loaded on demand | pending |
+| `phase-3/` | Stretch model + vision: `local-big` (Qwen3.5-122B-A10B, or DeepSeek V4-Flash for long-context-heavy workloads on Mac Studio class) and Qwen3-VL-8B loaded on demand | pending |
 | `phase-4/` | Side quests: LibreChat (web UI + MCP testing via OrbStack), opencode (Claude-Code-alike), Draw Things, ComfyUI, Stable Audio Open if motivated | pending |
 
 ## Operational discipline
@@ -194,6 +196,7 @@ sudo tmutil addexclusion -p "$HOME/Library/Application Support/Jan/data/llamacpp
 sudo tmutil addexclusion -p "$HOME/Library/Application Support/Jan/data/mlx/models"
 # optional — only if you accept re-running the uv tool installs after a restore:
 sudo tmutil addexclusion -p ~/.local/share/uv
+sudo tmutil addexclusion -p ~/Documents/Draw\ Things\ Models/  #this one is a custom path
 ```
 
 Verify:
