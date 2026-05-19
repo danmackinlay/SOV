@@ -11,3 +11,4 @@ Numbered ADRs documenting the *why* behind architectural choices in SOV. Format 
 | [0005](0005-apple-neural-engine.md) | Apple Neural Engine: not a target for the laptop track | Accepted |
 | [0006](0006-secret-handling.md) | Secret handling and configuration (direnv + phased adoption) | Accepted |
 | [0007](0007-deepseek-v4-and-the-concurrency-consequence.md) | DeepSeek V4 and the concurrency consequence | Accepted |
+| [0008](0008-newsletter-buttondown-integration.md) | Newsletter digest → Buttondown via REST API, not the CLI | Accepted |
