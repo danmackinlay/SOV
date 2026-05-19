@@ -19,13 +19,13 @@ What are your plans if this happens?
 > The Taiwan Strait crisis has been going for six months.
 > Australia’s submarine cables to Asia are damaged—some by mines, some by “accidents”—and the US has requisitioned most of the Pacific satellite bandwidth for military use.
 > Starlink is technically available, but routed through US ground stations under wartime emergency rules; latency is bad and the terms of service now exclude “non-allied commercial AI inference.”
-
+>
 > You’re a freelance engineer.
 > You used to start every morning with Claude helping you plan your work, draft client emails, review code.
 > That stopped working in week two of the crisis.
 > OpenAI is intermittently available, but the API is rate-limited to US customers and the pricing has tripled.
 > The Chinese services—DeepSeek, Qwen’s hosted API—are obviously gone.
-
+>
 > Your friend down the road is in a compute collective.
 > They have a DGX Station in a rack at a colo in Alexandria.
 > It’s running a de-censored Qwen model, nothing fancy, noticeably worse than Claude was.
@@ -36,7 +36,7 @@ What are your plans if this happens?
 > You ask if you can join.
 > There’s a waiting list.
 
-That's the kind of problem that a compute collective can solve.
+That's the kind of problem that a comunity compute collective targets.
 [Background here](https://danmackinlay.name/notebook/aus_sovereign_llm.html).
 
 ## End goal
