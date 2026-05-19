@@ -71,20 +71,27 @@ Quant suffixes assume MLX repos in [`mlx-community/`](https://huggingface.co/mlx
 
 **Long-context-friendly alternative for `local-big`:** [DeepSeek V4-Flash](https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash) (13 B active, 284 B total; April 2026). The interesting bit is the **DSA sparse attention**: per DeepSeek's tech report a full million-token context costs ~9.6 GB of KV cache instead of the tens of GB a conventional 13 B-active model would use. Practical apple-side implication: long-context workloads (sustained Aider sessions, large RAG queries) hit the KV-cache cliff much later than they would on Qwen3.5-122B-A10B — and laptops are exactly the regime where that matters, because unified-memory budgets are tight. See [ADR 0007](../docs/decisions/0007-deepseek-v4-and-the-concurrency-consequence.md) for the worked arithmetic (cloud-side, illustrative); apple-side numbers will differ proportionally with available memory.
 
-Quant landscape, measured directly from Hugging Face file sizes — V4-Flash is a popular conversion target and there are dozens of community variants, most useless for laptops. The shortlist that's both **MLX-loadable and small enough to leave KV-cache headroom on a 128 GB Mac:**
+### Decisions
 
-| Repo | Size | Scheme | Loader | Notes |
-|---|---|---|---|---|
-| [`OsaurusAI/DeepSeek-V4-Flash-JANGTQ2`](https://huggingface.co/OsaurusAI/DeepSeek-V4-Flash-JANGTQ2) | **79.6 GB** | 2-bit MXTQ on routed-expert MLP + 8-bit affine elsewhere; MTP head preserved | **`jang-tools`** + mlx-lm (custom loader) | Smallest viable; the README argues 2-bit on routed experts holds *because* DSV4 routes top-6-of-256 plus a shared expert plus 3 hash layers, so per-token output averages codebook noise across 7+ pathways — much weaker quality constraint than top-1 architectures. Plausible but **unmeasured on a real task suite**. |
-| [`mlx-community/DeepSeek-V4-Flash-2bit-DQ`](https://huggingface.co/mlx-community/DeepSeek-V4-Flash-2bit-DQ) | 96.5 GB | Dynamic mixed: 2-bit routed-MoE, 4/6/8-bit on sensitive layers | vanilla `mlx-lm` | Standard-loader path; tight on 128 GB (leaves ~32 GB for OS+KV+apps). Lambda.ai-sponsored conversion. Quality cost vs higher-bit baselines unmeasured. |
-| [`inferencerlabs/DeepSeek-V4-Flash-MLX-2.8bit-EXP`](https://huggingface.co/inferencerlabs/DeepSeek-V4-Flash-MLX-2.8bit-EXP) | 102.2 GB | Modified MLX, "experimental" | needs modified mlx fork | README is honest: "compresses to fit 128 GiB but overall accuracy is degraded". A controlled experiment, not a recommendation. |
-| [`Thump604/DeepSeek-V4-Flash-MLX-Q2-mixed-gs128-affine`](https://huggingface.co/Thump604/DeepSeek-V4-Flash-MLX-Q2-mixed-gs128-affine) | 106.4 GB | 2-bit + 6-bit mixed, affine, group size 128 | vanilla `mlx-lm` | Real numbers: 106.94 GB peak footprint measured on 128 GB Mac Studio, zero swaps at 4k context. README explicitly says "not quality-qualified for production writing or coding lanes." |
-| [`mlx-community/DeepSeek-V4-Flash-4bit`](https://huggingface.co/mlx-community/DeepSeek-V4-Flash-4bit) | 151.5 GB | Plain 4-bit | vanilla `mlx-lm` | Reference — does *not* fit 128 GB Macs; Mac Studio 192 GB+ class only. |
+The 50+ community V4-Flash quants on Hugging Face split into "drop in to `mlx_lm.server` and use the SOV-style stack" versus "needs a custom loader and runs outside the scaffolding." We adopt one of each:
 
-**On a 128 GB MacBook Pro** the only candidate that leaves real KV-cache room is **JANGTQ2** at 79.6 GB (~48 GB headroom). 2bit-DQ at 96.5 GB works but tightly. Everything above ~100 GB is for Mac Studios. The JANGTQ2 loader caveat is real — you'd need `pip install jang-tools` alongside `mlx-lm`, and the SOV apple track's `mlx_lm.server`-centric tooling doesn't automatically pick that up.
+- **Main-stack pick: [`mlx-community/DeepSeek-V4-Flash-2bit-DQ`](https://huggingface.co/mlx-community/DeepSeek-V4-Flash-2bit-DQ)** (~96.5 GB resident). Dynamic mixed-precision quant: 2-bit on routed-MoE experts, 4/6/8-bit on sensitive layers (attention projections, embeddings, lm_head). Vanilla `mlx-lm` loads it; no special tooling. Tight on a 128 GB Mac (leaves ~32 GB for OS + KV cache + apps) but workable for typical contexts; comfortable on Mac Studio class. When V4-Flash actually enters the apple track at [phase 3](#sub-phases), this is the `local-big` candidate that goes into [`bin/model-switch.sh`](bin/model-switch.sh).
+- **Sideband experiment: [`OsaurusAI/DeepSeek-V4-Flash-JANGTQ2`](https://huggingface.co/OsaurusAI/DeepSeek-V4-Flash-JANGTQ2)** (~79.6 GB resident). 2-bit MXTQ on routed-expert MLPs + 8-bit affine on everything else, MTP head preserved. Smaller than `2bit-DQ` by ~17 GB on disk; the README argues the aggressive 2-bit holds because DSV4 routes top-6-of-256 experts per token plus a shared expert plus 3 hash layers, so per-token output averages codebook noise across 7+ pathways — much weaker quality constraint than top-1 architectures. **Plausible argument, unmeasured by us.** Needs a custom loader (`jang-tools`) and does *not* drop into `mlx_lm.server` cleanly. Testing via **[LM Studio](https://lmstudio.ai)** — its MLX engine has a JANGTQ loader path. Treated as a *parallel quality experiment* outside the SOV scaffolding; promote into the main stack only if (a) measured quality on real prompts holds and (b) someone packages a `mlx_lm.server`-compatible JANGTQ loader.
+
+This is two tracks deliberately: the vanilla `2bit-DQ` keeps the cross-track muscle memory intact (one stack, one launcher, one config); JANGTQ2 in LM Studio is a chat-only side experiment we can compare against.
+
+### Variants surveyed but passed on
+
+For reference, in case the JANGTQ2 experiment goes sideways and we want to revisit:
+
+| Repo | Size | Loader | Why passed |
+|---|---|---|---|
+| `inferencerlabs/DeepSeek-V4-Flash-MLX-2.8bit-EXP` | 102.2 GB | modified mlx fork | Author explicitly says "accuracy is degraded"; controlled experiment, not a recommendation. |
+| `Thump604/DeepSeek-V4-Flash-MLX-Q2-mixed-gs128-affine` | 106.4 GB | vanilla `mlx-lm` | 106.94 GB peak measured on a 128 GB Mac Studio (zero swaps at 4k context), but author flags "not quality-qualified for production." Marginal headroom + same quality unknown as 2bit-DQ at higher cost. |
+| `mlx-community/DeepSeek-V4-Flash-4bit` (and `-mxfp4`, `-nvfp4`) | 151.5 GB | vanilla `mlx-lm` | Doesn't fit 128 GB; Mac Studio 192 GB+ only. The `mxfp4`/`nvfp4` formats are about hardware-acceleration scaling on Blackwell, not bit-width reduction — same 151 GB. |
 
 Caveats across the board:
-- **No measured quality numbers for any aggressive variant** on the task suites we care about (math, code, long-context retrieval). Plausibility arguments and absence of obvious-incoherence claims are the state of the art. Phase-3 of this track is where we'd actually measure; until then, aggressive-quant V4-Flash is experimental.
+- **No measured quality numbers for any aggressive V4-Flash variant** on the task suites we care about (math, code, long-context retrieval). Plausibility arguments and absence of obvious-incoherence claims are the state of the art. Phase-3 measurement is where we'd put real numbers behind these picks.
 - **V4's `deepseek_v4` architecture is fast-moving.** ADR 0007 documents vLLM commit-sensitivity; the apple-side equivalent is to `uv tool upgrade mlx-lm` before pulling new V4 quants — mlx-lm's V4 support is itself under active development (Thump604's README explicitly lists FP4/FP8 handling, F8_E8M0 metadata reinterpretation, attention-sink dtype, and quantized grouped-output-projection fixes as in-progress).
 - **Per-token speed** is slower than Qwen3.5-122B-A10B because V4-Flash has more active params (13 B vs 10 B); the win is long-context behaviour, not raw tok/s.
 
@@ -99,7 +106,7 @@ Sub-phase directories are created when started, same convention as the main SOV 
 | [`phase-0/`](phase-0/) | Jan-as-full-MLX-stack one-shot: install Jan, chat with a local MLX model, confirm Apple Silicon LLMs work for you. Disposable; no extension to agentic coding. | scoped |
 | [`phase-1/`](phase-1/) | SOV-style composable stack: `mlx_lm.server` + LiteLLM + Jan-as-thin-client + Aider. Unlocks agentic coding. | scoped |
 | `phase-2/` | RAG: Marker + LanceDB + AnythingLLM over a Zotero subset; cloud-fallback aliases in LiteLLM | pending |
-| `phase-3/` | Stretch model + vision: `local-big` (Qwen3.5-122B-A10B, or DeepSeek V4-Flash for long-context-heavy workloads on Mac Studio class) and Qwen3-VL-8B loaded on demand | pending |
+| `phase-3/` | Stretch model + vision: `local-big` (Qwen3.5-122B-A10B by default, or DeepSeek V4-Flash via [`2bit-DQ`](https://huggingface.co/mlx-community/DeepSeek-V4-Flash-2bit-DQ) for long-context-heavy workloads — fits 128 GB Macs tightly) and Qwen3-VL-8B loaded on demand. JANGTQ2 in LM Studio runs as a parallel quality experiment outside the main scaffolding (see [V4-Flash decisions](#decisions)). | pending |
 | `phase-4/` | Side quests: LibreChat (web UI + MCP testing via OrbStack), opencode (Claude-Code-alike), Draw Things, ComfyUI, Stable Audio Open if motivated | pending |
 
 ## Operational discipline
