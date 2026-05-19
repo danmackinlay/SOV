@@ -9,10 +9,25 @@ We publish an occasional plain-language newsletter so interested
 laypeople can follow how SOV's thinking evolves. The mechanical half of
 that — turn recent git activity into a date-stamped draft and put it in
 Buttondown as an *unsent* draft for a human to humanise and send — is
-done by a local Claude skill (`sov-newsletter-digest`, lives under the
-gitignored `.claude/`, so it is not itself a tracked repo artefact;
-this ADR is). The skill is draft-only by design: it never sends, that
-stays a human action.
+done by a Claude skill (`sov-newsletter-digest`, in
+[`.claude/skills/`](../../.claude/skills/sov-newsletter-digest/)). The
+skill is draft-only by design: it never sends, that stays a human
+action.
+
+> **Amendment 2026-05-19.** This ADR originally noted the skill "lives
+> under the gitignored `.claude/`, so it is not itself a tracked repo
+> artefact". That is no longer true. The repo's `.gitignore` blanket-
+> ignored all of `.claude/`, which contradicted both Claude Code's
+> documented project-scope model (project skills live in
+> `.claude/skills/` and are meant to be committed and shared — see
+> [Claude Code settings docs](https://docs.claude.com/en/docs/claude-code/settings))
+> and SOV's own replicability norm (a forking collective should get the
+> tooling, not just the rationale). The ignore was narrowed to only the
+> genuinely per-user state (`.claude/settings.local.json`,
+> `.claude/*.local.md`); `.claude/skills/` is now tracked and the
+> newsletter skill ships with the repo. No secrets are involved — the
+> skill is prose plus scripts that read credentials from the direnv
+> environment (ADR 0006), never inline.
 
 Buttondown exposes two integration surfaces: an official Node CLI
 (`@buttondown/cli`) and a documented REST API
