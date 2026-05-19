@@ -59,17 +59,22 @@ flowchart TB
   members -. no dependency .-> vendors
 ```
 
+## Getting involved
+
+* Fork us
+* [**Contact** if you're interested in the cooperative itself](https://woozy-page-39c.notion.site/32d398af2ab0805293a9dfb1561b4bdf?pvs=105) (tick the “sovereign compute” box)
+* we'll send out intermitted updates on the newsletter if you want to stay in touch. [Subscribed here](https://buttondown.com/tech_resilience)
+
 ## Where to start
 
-0. **Interested? [Sign up for updates](https://woozy-page-39c.notion.site/32d398af2ab0805293a9dfb1561b4bdf?pvs=105).**
-1. **Why we're doing this** — read the rationale, two posts on Dan's blog:
-   - The [institutional/geopolitical case](https://danmackinlay.name/notebook/aus_sovereign_llm.html)
-   - The [technical sktch](https://danmackinlay.name/notebook/aus_sovereign_llm_technical.html) (which we hope to be superceded by this)
-   - See [`docs/rationale/`](docs/rationale/) for the executive summary.
+1. **Why we're doing this** — read the rationale:
 
-2. **What we're building** — read [`PLAN.md`](PLAN.md). That's the live plan, the architecture decisions, and the phased roadmap.
+   - [institutional/geopolitical case](https://danmackinlay.name/notebook/aus_sovereign_llm.html)
+   - [technical sketch](https://danmackinlay.name/notebook/aus_sovereign_llm_technical.html) (which we hope to supercede with this repo)
 
-3. **How we collaborate with Claude Code** — see [`CLAUDE.md`](CLAUDE.md) for shared agent context. Anyone running Claude Code in this repo will get this loaded automatically.
+3. **What we're building** — read [`PLAN.md`](PLAN.md). That's the live plan, the architecture decisions, and the phased roadmap.
+
+4. **How we collaborate with Coding Agents** — see [`CLAUDE.md`](CLAUDE.md) for shared agent context. Anyone running Claude Code in this repo will get this loaded automatically.
 
 ## Status
 
@@ -84,7 +89,6 @@ What's welcome:
 
 - **Issues** flagging factual errors in [`PLAN.md`](PLAN.md) or the [ADRs](docs/decisions/) — we'd rather know.
 - **Forks** by other groups thinking about sovereign compute. The Apache-2.0 [`LICENSE`](LICENSE) is permissive; replication is a stated goal of the project. If you fork to start your own collective, [say hi](https://danmackinlay.name/contact.html).
-- [**Contact** if you're interested in the cooperative itself](https://woozy-page-39c.notion.site/32d398af2ab0805293a9dfb1561b4bdf?pvs=105) (tick the “sovereign compute” box)
 
 ## Non goals (for us)
 
