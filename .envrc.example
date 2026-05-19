@@ -34,6 +34,11 @@
 # either track's `local-cloud` / `anthropic-claude` aliases. Optional.
 # export ANTHROPIC_API_KEY=""
 
+# Buttondown API key. Used by the sov-newsletter-digest skill to upload
+# the followers' digest as an unsent *draft* (never auto-sent). Optional
+# — only needed if you run that skill. https://buttondown.com/settings/api
+# export BUTTONDOWN_API_KEY=""
+
 # OpenAI API key. Two distinct roles depending on phase, same env var:
 #
 # - Phase 1 (apple track): used by Aider / opencode / openai-SDK
