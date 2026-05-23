@@ -190,6 +190,30 @@ For exactly the reasons we pass on Jan-as-full-stack: Osaurus is a *competing ha
 
 For routine SOV-style use, Jan-as-thin-client against `mlx_lm.server` remains the primary posture.
 
+### Osaurus vs LM Studio
+
+Honest assessment after the JANGTQ2 incident: **Osaurus dominates LM Studio on every axis that matters for the SOV apple track.** Documented here so future-us doesn't relitigate it:
+
+| Axis | LM Studio | Osaurus | Winner |
+|---|---|---|---|
+| License | Closed-source proprietary | **MIT** | Osaurus |
+| Native macOS | CEF-wrapped app | **Pure Swift, no Electron** | Osaurus |
+| MLX inference engine | Yes (standard mlx format) | **Yes (standard mlx + JANGTQ + own curated quants)** | Osaurus |
+| API surface | OpenAI-compat only | **OpenAI + Anthropic + Ollama compat** | Osaurus |
+| MCP | Limited / recent | **Full MCP server *and* client, OAuth/DCR for ~25 providers** | Osaurus |
+| Apple Foundation Models | No | **Yes (macOS 26+, `model: "foundation"`)** | Osaurus |
+| Voice input on ANE | No | **Yes (FluidAudio, global hotkey)** | Osaurus |
+| Agent loop with sandboxed VM | No | **Yes (Apple Containerization, macOS 26+)** | Osaurus |
+| Persistent memory + cryptographic identity | No | **Yes (secp256k1, three-layer memory)** | Osaurus |
+| Model browser UX | Polished, broad HF browse | Curated `OsaurusAI` library + arbitrary HF | LM Studio slightly |
+| Familiarity / tutorials | Larger ecosystem | Newer | LM Studio slightly |
+
+The two "slightly" rows are real but minor: LM Studio's model-discovery UI is more developed, and there's more third-party tutorial content for LM Studio out there. Neither outweighs the licensing posture, the API breadth, or the MCP/agent capabilities — and they're convergence-time issues that close further as Osaurus matures.
+
+**Implication for this track:** LM Studio drops out of the recommended-alternative tier. If you have it installed from earlier exploration, leave it or uninstall as you prefer; we don't suggest installing it fresh. Osaurus replaces it as "the more-capable single-app alternative to the SOV-style composable stack."
+
+LM Studio remains in the [Why runtime choice changes "MLX speed"](#why-runtime-choice-changes-mlx-speed) section below as one of several runtimes that illustrate the variance-source framework — that's an educational example, not a recommendation.
+
 ## Why runtime choice changes "MLX speed"
 
 A common confusion: "the same MLX model runs at different tok/s in Ollama vs LM Studio vs Jan vs `mlx_lm.server` — why?" Because **a model file is inert weights; speed is a property of the stack that runs it.** The weights are maybe 10% of the story. Observed throughput is roughly:
@@ -269,7 +293,9 @@ Verify:
 
 ```bash
 for p in ~/.cache/huggingface ~/.cache/uv ~/.ollama/models ~/.lmstudio \
-  "$HOME/Library/Application Support/Jan/data/llamacpp/models"; do
+  "$HOME/Library/Application Support/Jan/data/llamacpp/models" \
+  "$HOME/Library/Application Support/Jan/data/mlx/models" \
+  ~/MLXModels; do
   tmutil isexcluded "$p"
 done
 ```
@@ -277,7 +303,8 @@ done
 Judgement calls:
 
 - **Jan: exclude the two `*/models` subdirs, not the whole `Jan/` dir.** The parent also holds conversation history and settings — small and worth keeping. If you don't care about Jan chat history, excluding `"$HOME/Library/Application Support/Jan"` wholesale is simpler.
-- **LM Studio: exclude `~/.lmstudio` wholesale.** None of it is precious if LM Studio isn't a primary client (and on this track it isn't — see [Why Jan as a thin client](#why-jan-as-a-thin-client-not-as-a-full-stack)).
+- **Osaurus: exclude `~/MLXModels` wholesale** (or wherever `OSU_MODELS_DIR` points). Conversation history, agent state, identity keys live elsewhere under `~/Library/Application Support/Osaurus` — *keep* those; they're small and re-deriving identity keys is annoying.
+- **LM Studio: exclude `~/.lmstudio` wholesale, or just uninstall.** LM Studio is dominated by Osaurus on every axis that matters to this track (see [Osaurus vs LM Studio](#osaurus-vs-lm-studio) below) — its presence in the exclusion list is for collaborators who still have it installed from earlier exploration, not because we recommend keeping it around.
 - **`~/.cache/huggingface` is the win** — the one that actually matters; everything else is rounding error by comparison.
 
 #### Image-gen tools (phase 4 — paths confirmed when installed)
