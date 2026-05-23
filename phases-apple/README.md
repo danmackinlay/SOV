@@ -76,7 +76,11 @@ Quant suffixes assume MLX repos in [`mlx-community/`](https://huggingface.co/mlx
 The 50+ community V4-Flash quants on Hugging Face split into "drop in to `mlx_lm.server` and use the SOV-style stack" versus "needs a custom loader and runs outside the scaffolding." We adopt one of each:
 
 - **Main-stack pick: [`mlx-community/DeepSeek-V4-Flash-2bit-DQ`](https://huggingface.co/mlx-community/DeepSeek-V4-Flash-2bit-DQ)** (~96.5 GB resident). Dynamic mixed-precision quant: 2-bit on routed-MoE experts, 4/6/8-bit on sensitive layers (attention projections, embeddings, lm_head). Vanilla `mlx-lm` loads it; no special tooling. Tight on a 128 GB Mac (leaves ~32 GB for OS + KV cache + apps) but workable for typical contexts; comfortable on Mac Studio class. When V4-Flash actually enters the apple track at [phase 3](#sub-phases), this is the `local-big` candidate that goes into [`bin/model-switch.sh`](bin/model-switch.sh).
-- **Sideband experiment: [`OsaurusAI/DeepSeek-V4-Flash-JANGTQ2`](https://huggingface.co/OsaurusAI/DeepSeek-V4-Flash-JANGTQ2)** (~79.6 GB resident). 2-bit MXTQ on routed-expert MLPs + 8-bit affine on everything else, MTP head preserved. Smaller than `2bit-DQ` by ~17 GB on disk; the README argues the aggressive 2-bit holds because DSV4 routes top-6-of-256 experts per token plus a shared expert plus 3 hash layers, so per-token output averages codebook noise across 7+ pathways — much weaker quality constraint than top-1 architectures. **Plausible argument, unmeasured by us.** Needs a custom loader (`jang-tools`) and does *not* drop into `mlx_lm.server` cleanly. Testing via **[LM Studio](https://lmstudio.ai)** — its MLX engine has a JANGTQ loader path. Treated as a *parallel quality experiment* outside the SOV scaffolding; promote into the main stack only if (a) measured quality on real prompts holds and (b) someone packages a `mlx_lm.server`-compatible JANGTQ loader.
+- **Sideband experiment: [`OsaurusAI/DeepSeek-V4-Flash-JANGTQ2`](https://huggingface.co/OsaurusAI/DeepSeek-V4-Flash-JANGTQ2)** (~79.6 GB resident). 2-bit MXTQ on routed-expert MLPs + 8-bit affine on everything else, MTP head preserved. Smaller than `2bit-DQ` by ~17 GB on disk; the README argues the aggressive 2-bit holds because DSV4 routes top-6-of-256 experts per token plus a shared expert plus 3 hash layers, so per-token output averages codebook noise across 7+ pathways — much weaker quality constraint than top-1 architectures. **Plausible argument, unmeasured by us.** Needs a custom loader because the quant uses a non-standard `mxtq` codec that doesn't match vanilla MLX's `{bits, group_size}` quantization metadata — **LM Studio fails to load JANGTQ models with "Unsupported safetensors format: null"** (we tried; an earlier version of this doc claimed otherwise — that was wrong). The two paths that actually work:
+    1. **[Osaurus](https://osaurus.ai)** ([osaurus-ai/osaurus](https://github.com/osaurus-ai/osaurus), MIT, native Swift, `brew install --cask osaurus`) — the intended runtime, by the same crew that uploads the JANGTQ models. See [Osaurus as a comprehensive Swift-native alternative](#osaurus-as-a-comprehensive-swift-native-alternative) below for what Osaurus is beyond the JANGTQ angle.
+    2. **`jang-tools` Python loader** (`pip install jang-tools mlx-lm`) — the README's documented CLI path; no GUI, scriptable, useful if you want to wrap it in a custom server.
+
+    Treated as a *parallel quality experiment* outside the SOV scaffolding; promote into the main stack only if (a) measured quality on real prompts holds and (b) someone packages a `mlx_lm.server`-compatible JANGTQ loader.
 
 This is two tracks deliberately: the vanilla `2bit-DQ` keeps the cross-track muscle memory intact (one stack, one launcher, one config); JANGTQ2 in LM Studio is a chat-only side experiment we can compare against.
 
@@ -150,6 +154,42 @@ The MLX-in-Jan path is a legitimate alternative for someone doing laptop-only LL
 
 **One concrete friction to watch for in either posture:** Jan launches its internal runtime(s) on startup whether or not you're using them. The "spinner waiting for a model server" you may see on first launch is Cortex / the MLX backend starting up, not Jan failing to connect to your external endpoint. On a 128 GB box it's invisible; on tighter machines you may want to disable internal-runtime auto-start in **Settings → Local API Server** so RAM isn't pre-allocated to runtimes you don't use. Don't let Jan auto-download models either — use `hf download` so the cache discipline below applies and `bin/model-status.sh` reflects reality.
 
+## Osaurus as a comprehensive Swift-native alternative
+
+[**Osaurus**](https://osaurus.ai) ([osaurus-ai/osaurus](https://github.com/osaurus-ai/osaurus), MIT, native Swift, 5k+ ★, active — latest release in the last 24 h at time of writing, `brew install --cask osaurus`) is the most ambitious of the alternative postures on the apple side. It is not a chat client like Jan, nor a runtime like `mlx_lm.server`, but a full **AI harness** that includes both and more:
+
+- **Drop-in compatible APIs on `http://127.0.0.1:1337`**: OpenAI (`/v1/chat/completions`), Anthropic (`/anthropic/v1/messages`), Ollama (`/api/chat`). The Anthropic-compatible endpoint is directly relevant to [ADR 0007](../docs/decisions/0007-deepseek-v4-and-the-concurrency-consequence.md)'s observation that V4 ships a native Anthropic API — Osaurus is one place that path could land cleanly for Claude-Code-style clients.
+- **Its own optimised MLX inference engine** (curated quants on [`huggingface.co/OsaurusAI`](https://huggingface.co/OsaurusAI), models stored under `~/MLXModels`).
+- **MCP server *and* client** — exposes local tools to MCP-aware clients (`osaurus mcp` stdio bridge), and consumes URL-based remote MCP providers with OAuth/DCR for ~25 well-known integrations.
+- **Apple Foundation Models bridge** on macOS 26+ (`model: "foundation"` — zero inference cost, on-device).
+- **Agent loop with a sandboxed Linux VM** via Apple's Containerization framework (macOS 26+) — agents get shell / Python / Node in an isolated env, with a vsock bridge back to Osaurus for inference and tools.
+- **Persistent agent memory, cryptographic identity (secp256k1), portable access keys, and a relay tunnel** (`agent.osaurus.ai`) for exposing agents to the internet without port forwarding.
+- **Voice input via FluidAudio on the Apple Neural Engine** — one of the legitimate places ANE earns its keep ([ADR 0005](../docs/decisions/0005-apple-neural-engine.md)) — global hotkey transcription into any app.
+
+### Why we don't adopt it as primary
+
+For exactly the reasons we pass on Jan-as-full-stack: Osaurus is a *competing harness*, not a *composable part*. In principle it could replace `mlx_lm.server` + Jan + LiteLLM with a single Swift-native app. We don't because:
+
+1. **Cross-track muscle memory.** SOV's cloud audition runs Jan as a thin client against vLLM via LiteLLM; the apple track mirrors that shape so collaborators don't context-switch. Osaurus is a different shape end-to-end.
+2. **Composability.** `bin/model-switch.sh`, `bin/litellm-start.sh`, and the cwd-rooted runbook discipline assume small interchangeable parts. Osaurus owns the lifecycle.
+3. **MLX quant scope.** Osaurus's curated MLX library is solid but narrower than the broader mlx-community catalogue; running an arbitrary `mlx-community/<repo>` requires more friction than vanilla `mlx-lm`.
+
+### Why we add it to the documented options
+
+- It's the **intended runtime for JANGTQ models** (see [V4-Flash Decisions](#decisions)). The earlier doc claim that LM Studio would load JANGTQ was wrong; Osaurus is the actual answer.
+- The MCP server angle interacts directly with the [open question on MCP-based RAG inside Jan vs AnythingLLM](#open-questions) and with the cloud track's [LibreChat-for-MCP-testing](../docs/decisions/0003-audition-surface-and-auth.md) framing. If Osaurus's MCP server proves out, it might collapse some of that question.
+- The **comprehensive-harness vs composable-parts** distinction is itself worth documenting. If a future collaborator wants the comprehensive path, Osaurus is the strongest candidate; we shouldn't bury that.
+- **FOSS posture is strong** — MIT, Swift-native, no Electron, active maintenance. It would not be an exception to the closed-source-acceptable rule (the way Draw Things is); it's an outright FOSS competitor.
+
+### When you might actually use it
+
+- **JANGTQ2 testing** (immediate). The sideband V4-Flash quality experiment lives here now.
+- **MCP integration prototyping**, if you want to test "MCP-aware client → MCP server" loops without setting up LibreChat + OrbStack first.
+- **Agent loop with sandboxed code execution**, if you want to compare Aider's diff-based editing against a more autonomous agent that can run shell/Python in a Linux VM.
+- **As a benchmarking foil** to `mlx_lm.server`: Osaurus's Swift-native MLX engine is a clean comparison point against our Python `mlx_lm.server` for the [runtime-speed framework](#why-runtime-choice-changes-mlx-speed) above. Same MLX weights, different host code.
+
+For routine SOV-style use, Jan-as-thin-client against `mlx_lm.server` remains the primary posture.
+
 ## Why runtime choice changes "MLX speed"
 
 A common confusion: "the same MLX model runs at different tok/s in Ollama vs LM Studio vs Jan vs `mlx_lm.server` — why?" Because **a model file is inert weights; speed is a property of the stack that runs it.** The weights are maybe 10% of the story. Observed throughput is roughly:
@@ -205,6 +245,7 @@ Sizes below are indicative (from one 128 GB Mac mid-phase-1); yours will differ.
 | `~/.lmstudio` | several GB | LM Studio models + runtime backends (if installed) | re-download in app |
 | `~/Library/Application Support/Jan/data/llamacpp/models` | several GB | Jan's Cortex/GGUF models | re-download in Jan |
 | `~/Library/Application Support/Jan/data/mlx/models` | grows if Jan-as-MLX used | Jan's native-MLX models | re-download in Jan |
+| `~/MLXModels` | grows if Osaurus used | Osaurus's MLX model directory (default; override via `OSU_MODELS_DIR`) | re-download in Osaurus |
 | `~/.local/share/uv` | 2–3 GB | installed uv tools (mlx-lm, litellm, aider…) | re-run the `uv tool install` lines |
 
 `Jan` and `jan` under Application Support are the **same directory** (case-insensitive APFS — same inode), not two; don't double-count or double-exclude.
@@ -218,6 +259,7 @@ sudo tmutil addexclusion -p ~/.ollama/models
 sudo tmutil addexclusion -p ~/.lmstudio
 sudo tmutil addexclusion -p "$HOME/Library/Application Support/Jan/data/llamacpp/models"
 sudo tmutil addexclusion -p "$HOME/Library/Application Support/Jan/data/mlx/models"
+sudo tmutil addexclusion -p ~/MLXModels   # if you use Osaurus
 # optional — only if you accept re-running the uv tool installs after a restore:
 sudo tmutil addexclusion -p ~/.local/share/uv
 sudo tmutil addexclusion -p ~/Documents/Draw\ Things\ Models/  #this one is a custom path
@@ -265,6 +307,7 @@ This page dates fast — model names, CLI verbs and node-pack repos churn. **Bef
 | Ollama | [docs.ollama.com](https://docs.ollama.com/faq) |
 | LiteLLM | [docs.litellm.ai/docs/proxy/quick_start](https://docs.litellm.ai/docs/proxy/quick_start) |
 | Jan | [janhq/jan](https://github.com/janhq/jan) |
+| Osaurus | [osaurus-ai/osaurus](https://github.com/osaurus-ai/osaurus) · [docs.osaurus.ai](https://docs.osaurus.ai) |
 | AnythingLLM | [docs.anythingllm.com](https://docs.anythingllm.com/installation-desktop/macos) |
 | Aider | [aider.chat/docs/llms/openai-compat.html](https://aider.chat/docs/llms/openai-compat.html) |
 | opencode | [github.com/sst/opencode](https://github.com/sst/opencode) |
