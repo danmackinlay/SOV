@@ -181,6 +181,12 @@ For exactly the reasons we pass on Jan-as-full-stack: Osaurus is a *competing ha
 - The **comprehensive-harness vs composable-parts** distinction is itself worth documenting. If a future collaborator wants the comprehensive path, Osaurus is the strongest candidate; we shouldn't bury that.
 - **FOSS posture is strong** — MIT, Swift-native, no Electron, active maintenance. It would not be an exception to the closed-source-acceptable rule (the way Draw Things is); it's an outright FOSS competitor.
 
+### Bus-factor caveat for the broader JANG ecosystem
+
+One risk worth flagging up front: the **JANG / JANGTQ ecosystem is essentially one person**, [Jinho "Eric" Jang](https://github.com/jjang-ai), who maintains the JANG quantization format spec, the Swift engine ([`osaurus-ai/vmlx-swift-lm`](https://github.com/osaurus-ai/vmlx-swift-lm)) that Osaurus wraps, the Python engine ([`jjang-ai/vmlx`](https://github.com/jjang-ai/vmlx)), the [JANGQ-AI model zoo on Hugging Face](https://huggingface.co/JANGQ-AI), a sibling Mac app ([MLX Studio](https://github.com/jjang-ai/mlxstudio)), *and* the Osaurus app itself. The vertical integration is what makes Osaurus's JANGTQ support coherent and fast-moving; the cost is that bus factor for the format-and-zoo combination is 1. There is some community wariness about this — see the [r/LocalLLaMA "Is MLX Studio legit?"](https://www.reddit.com/r/LocalLLaMA/comments/1rzuazp/is_mlx_studio_legit_never_heard_of_it_before/) thread.
+
+Mitigations: the code and format are MIT-licensed open source, so a community fork is possible if the author moves on; vanilla MLX quants (which Osaurus also loads) are unaffected. The risk is concentrated specifically on the JANGTQ-quantized models in the JANGQ-AI HF org — if those become orphaned, the loader path goes with them and we'd fall back to standard MLX quants. Acceptable given JANGTQ2 is already scoped as a sideband experiment, not a load-bearing track dependency.
+
 ### When you might actually use it
 
 - **JANGTQ2 testing** (immediate). The sideband V4-Flash quality experiment lives here now.
@@ -238,6 +244,53 @@ tok/s ≈ f( which engine, engine version, quant variant,
 
 References: [MLX](https://github.com/ml-explore/mlx) · [mlx-lm](https://github.com/ml-explore/mlx-lm) ([SERVER.md](https://github.com/ml-explore/mlx-lm/blob/main/mlx_lm/SERVER.md)) · [llama.cpp](https://github.com/ggml-org/llama.cpp) · [LM Studio mlx-engine](https://github.com/lmstudio-ai/mlx-engine) · [LM Studio API docs](https://lmstudio.ai/docs/app/api) · [Jan 0.7.7 release notes](https://github.com/janhq/jan/releases/tag/v0.7.7) · [Ollama](https://github.com/ollama/ollama) · [HF MLX format](https://huggingface.co/docs/hub/en/mlx).
 
+## Memory: the wired-RAM ceiling
+
+The cliff we keep alluding to has a specific shape worth knowing. The operational-discipline bullet says "watch unified-memory pressure, not free RAM" — this section is the *why* and what to do about it.
+
+**macOS "Memory Used" is misleading.** It folds the file cache into the "used" total, and the file cache is reclaimable on demand. The metric that matters is **Memory Pressure** (green / yellow / red in Activity Monitor, or `Pages purgeable` / `Pages compressed` from `vm_stat`). A 128 GB Mac showing 120 GB "used" with green pressure has plenty of room.
+
+But there is a separate, **hard cap** that bites MLX specifically.
+
+### The wired-limit
+
+Apple sets a hard ceiling on how much RAM Metal — and therefore MLX — is allowed to *wire* (lock into physically resident, GPU-accessible memory). The default is **~67% on Macs ≤36 GB and ~75% on larger ones**. On a 128 GB Mac that means **MLX refuses to allocate past ~96 GB**, regardless of how much actually-free memory there is. That is exactly where the [`mlx-community/DeepSeek-V4-Flash-2bit-DQ`](#decisions) pick (96.5 GB resident) sits — *at* the default cliff — which explains why JANGTQ2 at 79.6 GB feels comfortable and `2bit-DQ` feels tight on the same hardware. The cliff isn't a swap-pressure cliff; it's an MLX-allocator refusal.
+
+Raise it at runtime (Sonoma 14.x+):
+
+```bash
+# Cap MLX at 112 GB — leaves ~16 GB for the OS and other apps
+sudo sysctl iogpu.wired_limit_mb=114688
+
+# Confirm
+sudo sysctl iogpu.wired_limit_mb
+
+# Reset to default
+sudo sysctl iogpu.wired_limit_mb=0
+```
+
+Not persistent across reboots — wrap in a LaunchDaemon or `/etc/sysctl.conf` entry to make it sticky if you'll routinely run near the limit.
+
+**Do not set it to the full 128 GB.** If MLX wires more than the OS can spare, the machine kernel-panics — Michael Hannecke's [postmortem](https://medium.com/@michael.hannecke/how-my-local-coding-agent-crashed-my-mac-and-what-i-learned-about-mlx-memory-management-e0cbad01553c) is the cautionary tale. Leave at least 10–16 GB of headroom; on a machine running Slack and Chrome alongside, more.
+
+Both `mlx_lm.server` and the Swift `vmlx-swift-lm` engine that [Osaurus](#osaurus-as-a-comprehensive-swift-native-alternative) wraps call `mx.set_wired_limit()` on startup, coordinating the limit across concurrent requests. The Swift side's [wired-memory documentation](https://swiftpackageindex.com/ml-explore/mlx-swift-lm/3.31.3/documentation/mlxlmcommon/wired-memory) is the upstream reference.
+
+### Pre-launch housekeeping
+
+Before launching a memory-tight model run:
+
+- **`sudo purge`** flushes the file cache so the OS has clean room to allocate. Available RAM jumps; subsequent file I/O is slower until the cache refills.
+- **Quit Electron apps.** Slack, Discord, Cursor, VS Code, Chrome each routinely pin 4–8 GB. The savings compound.
+- **`export MLX_LM_CACHE_LIMIT=0`** prevents MLX's internal allocation cache from growing unboundedly during long sessions — useful for sustained embedding or agent workloads where the cache otherwise creeps up over hours.
+- **`mactop`** in another pane to watch pressure, swap-out rate, and GPU memory utilization live; [`bin/model-status.sh`](bin/model-status.sh) is the one-shot equivalent.
+
+### When the model genuinely doesn't fit
+
+Two escape valves once you've raised the wired limit and done the housekeeping:
+
+- **JANGTQ-class mixed-precision quants** at the low end (see [V4-Flash Decisions](#decisions)). JANGTQ2 at 79.6 GB fits a 284 B-parameter model in the wired-limit budget where vanilla 4-bit MLX cannot. Same trick generalises to other models when JANG ports exist.
+- **Smelt mode** in [MLX Studio / vMLX](https://github.com/jjang-ai/mlxstudio) — for MoE models, loads only a subset of experts into RAM and keeps the rest on SSD. Quality stays coherent; throughput drops because expert swaps hit SSD on the hot path. Not in the SOV-style stack, but worth knowing exists if you're testing the edge of fit-on-this-machine.
+
 ## Cleanup & disk management
 
 The Hugging Face cache at `~/.cache/huggingface/` accumulates relentlessly — every `hf download` lands a new revision, MoE weight shards are big, nothing is ever auto-removed. Budget on disk hygiene every few weeks.
@@ -255,9 +308,9 @@ The relevant `hf` subcommands (current as of 2026; the old `huggingface-cli` ali
 
 To move the cache off the boot volume (large models on an external SSD, say), set `HF_HOME` in your `.envrc.local` — direnv will export it to every `hf` and `mlx_lm` process automatically.
 
-### Time Machine / backup exclusions
+### Backup & indexing exclusions
 
-Model weights are the single biggest way this stack will balloon a Time Machine (or any incremental) backup. They're also the most pointless thing to back up — every byte is re-downloadable. Exclude the model/cache directories before your first backup after bootstrapping.
+Model weights are the single biggest way this stack will balloon a Time Machine (or any incremental) backup, *and* the worst possible thing to feed Spotlight (it'll grind for hours indexing opaque `.safetensors` blobs and produce nothing useful). Both background services want the same list of directories — exclude once, in one place. None of it is worth the cycles; every byte is re-downloadable.
 
 Sizes below are indicative (from one 128 GB Mac mid-phase-1); yours will differ. The "reconstruct via" column is why none of this is worth backup space.
 
@@ -274,30 +327,42 @@ Sizes below are indicative (from one 128 GB Mac mid-phase-1); yours will differ.
 
 `Jan` and `jan` under Application Support are the **same directory** (case-insensitive APFS — same inode), not two; don't double-count or double-exclude.
 
-Apply as **sticky path exclusions** (`-p`) so they survive the tools deleting and recreating these dirs — a plain `tmutil addexclusion` sets an xattr that's lost on recreate, which is exactly what caches do:
+One array, two loops — Time Machine uses **sticky path exclusions** (`-p`) so they survive the tools deleting and recreating dirs (a plain `tmutil addexclusion` sets an xattr that's lost on recreate, which is exactly what caches do), and Spotlight uses Apple's documented [`.metadata_never_index`](https://developer.apple.com/library/archive/documentation/Carbon/Conceptual/MDImporters/Concepts/Troubleshooting.html) marker file. Both require the directory to exist before they will accept it, hence the `[ -d "$d" ]` guard.
 
 ```bash
-sudo tmutil addexclusion -p ~/.cache/huggingface
-sudo tmutil addexclusion -p ~/.cache/uv
-sudo tmutil addexclusion -p ~/.ollama/models
-sudo tmutil addexclusion -p ~/.lmstudio
-sudo tmutil addexclusion -p "$HOME/Library/Application Support/Jan/data/llamacpp/models"
-sudo tmutil addexclusion -p "$HOME/Library/Application Support/Jan/data/mlx/models"
-sudo tmutil addexclusion -p ~/MLXModels   # if you use Osaurus
-# optional — only if you accept re-running the uv tool installs after a restore:
-sudo tmutil addexclusion -p ~/.local/share/uv
-sudo tmutil addexclusion -p ~/Documents/Draw\ Things\ Models/  #this one is a custom path
+model_dirs=(
+  ~/.cache/huggingface                                                  # the big one
+  ~/.cache/uv
+  ~/.ollama/models
+  ~/.lmstudio                                                            # only if still installed
+  "$HOME/Library/Application Support/Jan/data/llamacpp/models"
+  "$HOME/Library/Application Support/Jan/data/mlx/models"
+  ~/MLXModels                                                            # Osaurus default; or $OSU_MODELS_DIR
+  ~/.local/share/uv                                                      # optional — re-run `uv tool install` after restore
+)
+
+# Time Machine
+for d in "${model_dirs[@]}"; do
+  [ -d "$d" ] && sudo tmutil addexclusion -p "$d"
+done
+
+# Spotlight — drop the marker file so `mds_stores` skips the dir + subtree
+for d in "${model_dirs[@]}"; do
+  [ -d "$d" ] && touch "$d/.metadata_never_index"
+done
+
+# Verify a few
+for d in "${model_dirs[@]}"; do
+  [ -d "$d" ] && echo "$d: $(tmutil isexcluded "$d" 2>&1 | head -1) | spotlight-marker: $([ -f "$d/.metadata_never_index" ] && echo yes || echo no)"
+done
 ```
 
-Verify:
+If you ever want to re-index a directory (model dir promoted to "actual content"), `rm "$dir/.metadata_never_index"` and `mdimport -r "$dir"` puts it back.
+
+Draw Things has a custom path that doesn't fit the array pattern (it's a sandboxed-app container, not a cache dir):
 
 ```bash
-for p in ~/.cache/huggingface ~/.cache/uv ~/.ollama/models ~/.lmstudio \
-  "$HOME/Library/Application Support/Jan/data/llamacpp/models" \
-  "$HOME/Library/Application Support/Jan/data/mlx/models" \
-  ~/MLXModels; do
-  tmutil isexcluded "$p"
-done
+sudo tmutil addexclusion -p ~/Documents/Draw\ Things\ Models/  # if you've used the External Model Folder Setting
 ```
 
 Judgement calls:
