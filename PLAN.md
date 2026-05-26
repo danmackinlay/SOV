@@ -323,8 +323,9 @@ A runnable demo where each collaborator can experience an agent doing real-ish w
 1. **Aider** pointed at the SOV endpoint, doing a small refactor on a sample repo. Lowest implementation cost; immediate signal on coding-agent feel.
 2. **Claude Code in API mode** with `ANTHROPIC_BASE_URL` redirected to the SOV endpoint via an OpenAI-to-Anthropic translation shim. Highest "wow factor" if it works; significant integration cost (Claude Code expects Anthropic-format API). **If V4-Flash is the served model, the shim may be unnecessary** — V4 ships a native Anthropic-format API ([ADR 0007](docs/decisions/0007-deepseek-v4-and-the-concurrency-consequence.md), and §9 open question 2), which would collapse this candidate's main integration cost. Confirm empirically before building the shim.
 3. **A small custom Python agent** that does something concrete: read a CSV, do a multi-step research task, write a report. Maximum control; least transferable.
+4. **[`pi`](https://github.com/earendil-works/pi)** — Mario Zechner's MIT-licensed npm-installable harness, cross-platform, provider-agnostic by config. The case for pi here is that the harness layer is structurally where the cooperative member-side stack lives — the collective owns the *server* (vLLM on the eventual DGX), each member picks their own harness and frontend pointing at it (see [member-side stack](https://danmackinlay.name/notebook/aus_sovereign_llm.html#the-member-side-stack) in the rationale). pi is the same binary across apple-personal local-`mlx_lm.server`, the audition's vLLM endpoint, and Anthropic-as-fallback — making it the candidate for "one harness members use across every backend." Being actively trialed on the apple track (see [phases-apple/README.md §pi as the cross-track harness](phases-apple/README.md#pi-as-the-cross-track-harness)).
 
-**Default:** Aider as the workhorse POC plus a 50-line custom Python agent that exercises tool calling end-to-end. Claude-Code-in-API-mode is a stretch goal.
+**Default:** Aider as the workhorse POC plus a 50-line custom Python agent that exercises tool calling end-to-end. Claude-Code-in-API-mode is a stretch goal. `pi` runs alongside as a parallel evaluation against the same endpoint — same backend, different harness — to test whether it earns a recommendation in the eventual member-side stack documentation.
 
 **Deliverables:**
 - [`phases-cloud/phase-2-decensor-agentic/agentic/`](phases-cloud/) — runnable demos and a written walkthrough
@@ -439,6 +440,7 @@ These are real questions we have not yet answered. Record the resolution here wh
 5. **Phase 3 hosting venue (home / office / colo).** Defer until phase 2 results inform reliability requirements.
 6. **NIM evaluation depth at phase 3.** We've decided not to use it as the audition path, but we should at minimum verify it (and now Dynamo 1.0) can serve the same weights when we get to physical hardware. Defer.
 7. ~~**When do we swap Open WebUI for LibreChat?**~~ **Resolved 2026-05-12:** LibreChat adopted as primary from day 1 (was: pre-commit at phase 3 if membership >50). See [ADR 0003 §Revision](docs/decisions/0003-audition-surface-and-auth.md#revision-2026-05-12--librechat-promoted-to-primary).
+8. **Is `pi` the canonical member-side harness for the cooperative case?** The harness layer is where the cloud-track and apple-track converge ([member-side stack](https://danmackinlay.name/notebook/aus_sovereign_llm.html#the-member-side-stack)). `pi` has the right shape (provider-agnostic, MIT, cross-platform, no GUI lock-in) and is being apple-side trialed. Resolve at phase-2 retro after a few sessions; the alternative is "we don't pick — members each choose their own."
 
 ---
 
@@ -484,4 +486,4 @@ After phase 0 ships, we recap what we learned, update this plan if anything chan
 
 ---
 
-**Last freshness audit:** 2026-05-12. Provider pricing, model picks, quantization defaults, and inference-engine landscape (vLLM/SGLang/Dynamo) verified against upstream sources. Re-audit before each phase begins; staleness compounds.
+**Last freshness audit:** 2026-05-26. Added `pi` as candidate cooperative-side harness in phase-2 workstream B, with cross-reference to the apple-track [pi-as-cross-track-harness](phases-apple/README.md#pi-as-the-cross-track-harness) discussion. Provider pricing, model picks, quantization defaults, and inference-engine landscape (vLLM/SGLang/Dynamo) last verified 2026-05-12 against upstream sources. Re-audit before each phase begins; staleness compounds.

@@ -23,6 +23,23 @@ This is a *personal* stack — currently just for Dan but should be generic acro
 
 Image generation (Draw Things, ComfyUI) and audio generation (Stable Audio Open, deferred) sit beside this core.
 
+## Stack vocabulary
+
+A local-LLM setup is a vertical stack of layers, and most "this app is faster than that one" or "why doesn't X work with Y" debates are really about which layer changed. The names below are the lingua franca for the rest of this doc (and a near-mirror of the [companion blog notebook's](https://danmackinlay.name/notebook/local_llm_mac.html#the-stack) version):
+
+| Layer | What | Apple-track default | Other options |
+|---|---|---|---|
+| **Model** | The weights — `.safetensors`, distributed from Hugging Face | Qwen3.5-35B-A3B etc. (see [Models](#models)) | Any HF-distributed open-weight model |
+| **Quant format** | How weights are stored on disk; different runtimes read different formats | MLX 4-bit (mlx-community ports) | GGUF (llama.cpp / Ollama), JANGTQ (Osaurus/jang-tools), `mxtq`, AWQ, FP8, … |
+| **Runtime / inference engine** | The code that runs the matmuls — where the GPU work happens | MLX via `mlx-lm` (Python) | llama.cpp (via Cortex/Ollama), `vmlx-swift-lm` (via Osaurus, Swift), `ds4` (native Metal, V4-Flash only) |
+| **Server / daemon** | Long-lived process exposing an OpenAI-compatible HTTP endpoint | `mlx_lm.server` on `:8080` | Ollama (`:11434`), Osaurus (`:1337`, also Anthropic + Ollama compat), `ds4-server` (`:8000`), `llama-server` |
+| **Harness / agent loop** | Orchestration over the server — conversation state, tool calls, multi-turn agent loops, model switching | Aider for code; Jan for chat (Jan is a *thin* harness) | [`pi`](#pi-as-the-cross-track-harness) (npm, cross-platform, provider-agnostic), Osaurus (built-in), OpenCode, Continue, Claude Code (vendor-locked) |
+| **Frontend / chat client** | The human-facing surface | Jan | Osaurus's chat window, LibreChat, LM Studio, web UIs, terminal TUIs (`pi`'s own) |
+
+Most apps you've heard of are *vertical bundles*: Osaurus is frontend + harness + server + runtime in one; Ollama is server + runtime; Jan-as-thin-client is frontend pointed at someone else's server. SOV's apple-track default is the *unbundled* version — `mlx-lm` runtime, `mlx_lm.server` daemon, Aider/pi harness, Jan frontend — so any one layer can swap without disturbing the rest. The [Jan-thin-client](#why-jan-as-a-thin-client-not-as-a-full-stack) discussion, the [Osaurus-as-comprehensive-alternative](#osaurus-as-a-comprehensive-swift-native-alternative) discussion, and the [pi-as-cross-track-harness](#pi-as-the-cross-track-harness) discussion are all variations on "swap one layer, keep the rest."
+
+The **harness layer** is where the apple-track / cloud-track muscle memory actually lives. A harness manages conversation state and connects to whichever OpenAI-compatible endpoint you point it at — that endpoint can be a local `mlx_lm.server`, a LiteLLM proxy, the audition's vLLM-on-RunPod, or Anthropic / OpenAI cloud APIs. **Picking a provider-agnostic, no-GUI-lock-in harness is what collapses the apple-personal and cloud-cooperative experiences into the same workflow.** The blog post's [member-side-stack section](https://danmackinlay.name/notebook/aus_sovereign_llm.html#the-member-side-stack) applies the same idea to the cooperative case.
+
 ## Stack at a glance
 
 | Layer | Pick | Install | Why |
@@ -32,6 +49,7 @@ Image generation (Draw Things, ComfyUI) and audio generation (Stable Audio Open,
 | Routing | LiteLLM proxy | `uv tool install 'litellm[proxy]'` | Single endpoint, model aliases, mix local + cloud |
 | Chat client | Jan | DMG from [jan.ai](https://jan.ai) | Native macOS, points at LiteLLM, flight-mode capable |
 | Editor agent | Aider | `uv tool install aider-chat` | Diff-based edits work on local models; prose-friendly |
+| Cross-track harness | [`pi`](#pi-as-the-cross-track-harness) | per [earendil-works/pi](https://github.com/earendil-works/pi) ([details](#pi-as-the-cross-track-harness)) | Provider-agnostic CLI harness; same binary works against local `mlx_lm.server`, LiteLLM, the SOV cloud audition, and Anthropic — the layer that collapses apple-personal and cloud-cooperative into one workflow |
 | RAG | AnythingLLM | DMG from [anythingllm.com](https://anythingllm.com) | Desktop app, points at LiteLLM, manages PDF workspaces |
 | PDF → markdown | Marker | `uv tool install marker-pdf` | Math/table-aware; fast on Apple Silicon |
 | Vision/OCR | Qwen3-VL-8B via mlx-lm (or rely on Qwen3.5 daily driver's native VL) | (pulled on demand) | Ad-hoc image-to-text; Marker has its own OCR |
@@ -82,7 +100,18 @@ The 50+ community V4-Flash quants on Hugging Face split into "drop in to `mlx_lm
 
     Treated as a *parallel quality experiment* outside the SOV scaffolding; promote into the main stack only if (a) measured quality on real prompts holds and (b) someone packages a `mlx_lm.server`-compatible JANGTQ loader.
 
-This is two tracks deliberately: the vanilla `2bit-DQ` keeps the cross-track muscle memory intact (one stack, one launcher, one config); JANGTQ2 in LM Studio is a chat-only side experiment we can compare against.
+- **Native-Metal alternative: [DwarfStar / `ds4`](https://github.com/antirez/ds4)** by [antirez](https://github.com/antirez) (Salvatore Sanfilippo, of [Redis](https://redis.io)). Not a quant, not a runtime *plugin* — a **from-scratch single-model native Metal inference engine** for DeepSeek V4-Flash. No MLX, no Python, no PyTorch, no llama.cpp. The README is explicit about the scope: "a small native inference engine specific for DeepSeek V4 Flash. It is intentionally narrow: not a generic GGUF runner." Targets M3 Max, M3 Ultra, and M5 Max specifically. Independent benchmarks: ~14–15 tok/s decode at 62k context on M3 Max 128 GB; ~450 tok/s prompt-processing on M5 Max for a 10k-token codebase. The model file is a GGUF from antirez's own [HF org](https://huggingface.co/antirez/deepseek-v4-gguf) (~87 GB at the standard quant), unrelated to mlx-community or JANGTQ. Two ways to drive it:
+    1. **Direct, via [`ds4-server`](https://github.com/antirez/ds4)** — a generic OpenAI-compatible endpoint on `127.0.0.1:8000`. Any harness or frontend can talk to it without further machinery; point Aider, LiteLLM, Osaurus, or `curl` at the port.
+    2. **Via the [`pi` harness](#pi-as-the-cross-track-harness) and the [`mitsuhiko/pi-ds4`](https://github.com/mitsuhiko/pi-ds4) extension** — `pi install https://github.com/mitsuhiko/pi-ds4` clones antirez/ds4, builds it, downloads the GGUF, registers a `ds4/deepseek-v4-flash` model with pi, and handles per-PID lease + watchdog shutdown so the 87 GB-resident server doesn't sit idle. The most polished day-to-day experience if you're already on pi.
+
+    **Spiritually-aligned variant: [`audreyt/pi-ds4`](https://github.com/audreyt/pi-ds4)** by [Audrey Tang](https://en.wikipedia.org/wiki/Audrey_Tang) (Taiwan's former Digital Minister) — a fork of mitsuhiko/pi-ds4 that swaps in [cyberneurova](https://huggingface.co/cyberneurova)'s **abliterated IQ2XXS quants** and turns on **uncertainty-mode directional steering** by default. This is an activation-space edit (analogous to abliteration, the same technique on the cloud-track [phase 2 workstream A](../PLAN.md#workstream-a-abliteration) roadmap) that puts the model into a "this is a contested question" register on prompts the unsteered model would emit a memorized closed-form answer to (Taiwan, Crimea, Kashmir, Western Sahara). Per the fork's README, a hedge-style system prompt alone does *not* flip the closed-form completion; the steering vector does, and the system prompt then supplies the specific positions to draw from. **Same bus-factor and scope caveats as JANG and antirez/ds4 apply** — one model, one author per fork, weeks-old at time of writing. Useful as a third reference point for what de-censored open-weight inference can actually feel like on a laptop.
+
+This is now three tracks deliberately:
+- **Vanilla `2bit-DQ` via `mlx_lm.server`** — keeps cross-track muscle memory intact (one stack, one launcher, one config).
+- **JANGTQ2 via Osaurus** — sideband quality experiment we can compare against; loader is non-vanilla.
+- **`ds4` via `ds4-server` (optionally through `pi-ds4`)** — entirely separate runtime; useful for benchmarking the SOV stack against a model-specific best-effort native engine, *and* for the abliterated-out-of-the-box experience via the `audreyt/pi-ds4` fork. All four of the named pi-ds4 contributors (antirez/Redis, mitsuhiko/Flask, badlogic/libGDX, audreyt/Pugs+Taiwan) converging on V4-Flash plus M-series Macs is a useful "this corner is taken seriously" signal even if the bus factor on each individual piece is small.
+
+Active experiment status (as of 2026-05-26): Dan is currently testing all three — `pi` + `ds4` + Osaurus side-by-side on the same Mac. Findings will land back here as a [decisions §V4-Flash actuals](#decisions) update when the dust settles.
 
 ### Variants surveyed but passed on
 
@@ -110,8 +139,8 @@ Sub-phase directories are created when started, same convention as the main SOV 
 | [`phase-0/`](phase-0/) | Jan-as-full-MLX-stack one-shot: install Jan, chat with a local MLX model, confirm Apple Silicon LLMs work for you. Disposable; no extension to agentic coding. | scoped |
 | [`phase-1/`](phase-1/) | SOV-style composable stack: `mlx_lm.server` + LiteLLM + Jan-as-thin-client + Aider. Unlocks agentic coding. | scoped |
 | `phase-2/` | RAG: Marker + LanceDB + AnythingLLM over a Zotero subset; cloud-fallback aliases in LiteLLM | pending |
-| `phase-3/` | Stretch model + vision: `local-big` (Qwen3.5-122B-A10B by default, or DeepSeek V4-Flash via [`2bit-DQ`](https://huggingface.co/mlx-community/DeepSeek-V4-Flash-2bit-DQ) for long-context-heavy workloads — fits 128 GB Macs tightly) and Qwen3-VL-8B loaded on demand. JANGTQ2 in LM Studio runs as a parallel quality experiment outside the main scaffolding (see [V4-Flash decisions](#decisions)). | pending |
-| `phase-4/` | Side quests: LibreChat (web UI + MCP testing via OrbStack), opencode (Claude-Code-alike), Draw Things, ComfyUI, Stable Audio Open if motivated | pending |
+| `phase-3/` | Stretch model + vision: `local-big` (Qwen3.5-122B-A10B by default, or DeepSeek V4-Flash via [`2bit-DQ`](https://huggingface.co/mlx-community/DeepSeek-V4-Flash-2bit-DQ) for long-context-heavy workloads — fits 128 GB Macs tightly) and Qwen3-VL-8B loaded on demand. Two parallel experiments outside the main scaffolding: JANGTQ2 via Osaurus, and `ds4`/DwarfStar via `pi-ds4` (also enables the abliterated [`audreyt/pi-ds4`](https://github.com/audreyt/pi-ds4) fork) — see [V4-Flash decisions](#decisions). | pending |
+| `phase-4/` | Side quests: LibreChat (web UI + MCP testing via OrbStack), opencode (Claude-Code-alike), [`pi`](#pi-as-the-cross-track-harness) (cross-platform harness, also useful as an apple-side dry-run for the cooperative member-side stack), Draw Things, ComfyUI, Stable Audio Open if motivated | pending |
 
 ## Operational discipline
 
@@ -220,6 +249,41 @@ The two "slightly" rows are real but minor: LM Studio's model-discovery UI is mo
 
 LM Studio remains in the [Why runtime choice changes "MLX speed"](#why-runtime-choice-changes-mlx-speed) section below as one of several runtimes that illustrate the variance-source framework — that's an educational example, not a recommendation.
 
+## `pi` as the cross-track harness
+
+[**`pi`**](https://github.com/earendil-works/pi) ([earendil-works/pi](https://github.com/earendil-works/pi), MIT, npm-installable — see the upstream README for the current install incantation, which has churned during early development) is [Mario Zechner](https://github.com/badlogic)'s ([libGDX](https://libgdx.com)) cross-platform agent harness. It is the **harness layer** of the [stack vocabulary](#stack-vocabulary) above — manages tool-call loops, conversation state, slash commands; talks to whichever OpenAI- or Anthropic-compatible endpoint you point it at. Not a runtime, not a chat window in the Jan/LM-Studio/Osaurus sense (though it has a built-in TUI). Specifically:
+
+- **Cross-platform** — Node, runs on macOS, Linux, Windows, **and Android** via Termux.
+- **Provider-agnostic by design** — 15+ named providers (Anthropic, OpenAI, Google, xAI, Groq, Cerebras, …) plus arbitrary OpenAI- or Anthropic-compatible endpoints via a small JSON config (`~/.pi/agent/models.json`). The collective endpoint, your local `mlx_lm.server`, the SOV phase-1 LiteLLM proxy, the SOV cloud audition's vLLM-on-RunPod, your Anthropic key, and your Ollama instance can all sit in the same config; switch between them with `/model` or `Ctrl+L` inside an active session.
+- **Harness-only** — no GUI lock-in, no bundled chat window beyond the TUI, no opinions about which runtime or model serves your tokens. The composability of the SOV apple track survives.
+- **Extension model** — `pi install <github-url>` for plugins. Used in the [V4-Flash decisions](#decisions) section by `mitsuhiko/pi-ds4` and `audreyt/pi-ds4` to bolt antirez's `ds4` runtime onto the harness with per-PID lease and watchdog shutdown.
+- **Agent runtime with tool calling** — the conventional harness features (file edits, shell, web fetch via MCP, etc.) are there; not as polished as Aider's diff-based flow for code edits, but more general.
+
+### Why pi is the Schelling point we think it is
+
+The harness layer is structurally where the apple-track and cloud-track converge — Aider, OpenCode, Continue, Cursor, Claude Code all live there, and most of them are bundled with either an editor (Cursor, Continue), a vendor's API (Claude Code), or a specific workflow style (Aider's diffs). `pi` is the rare member of that category that's **(a) provider-agnostic by design, (b) not bundled with a GUI, (c) MIT-licensed, (d) cross-platform, (e) extension-driven, and (f) being adopted by the people who already write the engines underneath** — the antirez-mitsuhiko-badlogic-audreyt convergence around V4-Flash on M-series Macs (see [V4-Flash decisions](#decisions)) is a small-but-real Schelling signal. If a single harness becomes the "semi-pro local-LLM" default the way Aider became the "small-team coding assistant" default, `pi` is the candidate.
+
+For SOV specifically:
+
+- **Apple-track:** A pi config that lists `local-small` / `local-math` / `local-big` (via the phase-1 LiteLLM proxy at `127.0.0.1:4000`), the audition's cloud endpoint, and a fallback to Anthropic, gives a member exactly one harness across all three. The `/model` swap inside a session is the failover from "local is fine" → "I need the big one" → "the audition node is up, try that" → "everything's down, hit Anthropic." Same muscle memory throughout.
+- **Cloud-track parity:** The blog post's [member-side-stack section](https://danmackinlay.name/notebook/aus_sovereign_llm.html#the-member-side-stack) is explicit that the cooperative case looks the same — the collective owns the *server* (vLLM on the DGX), each member picks their own harness and frontend. `pi` is the harness that fits that model with the least friction. Adopting it apple-side now is also a dry-run for the cloud-side member experience.
+- **Phase-2 abliteration roadmap:** [`audreyt/pi-ds4`](https://github.com/audreyt/pi-ds4) ships abliterated-by-default V4-Flash through pi. That is the same maneuver SOV cloud-track [phase 2 workstream A](../PLAN.md#workstream-a-abliteration) is targeting, on a different model, at much smaller scale — useful as a working reference for what "the abliterated experience" actually feels like from inside a real harness, *now*, before we spend any cloud GPU time generating our own weights.
+
+### Why we don't (yet) make it primary
+
+- **Phase 1 ships with Aider** because Aider's diff-based code-editing flow is sharper than pi's general tool-calling for the specific workflow we want to test at phase 1 (small Qwen-class models doing code edits). Aider stays the recommended workhorse for the "is the apple stack actually useful for coding" question. pi sits beside it, not above it.
+- **Cross-track muscle memory is still real.** The cloud audition's phase-1 surface is LibreChat-the-frontend + vLLM-the-server (per [ADR 0003](../docs/decisions/0003-audition-surface-and-auth.md)); the harness layer there isn't pinned to pi yet either. If phase-2 workstream B picks a different harness as the canonical agentic POC, the apple track will probably mirror that.
+- **It's young.** Active development, fast-moving API, small community relative to Aider or Claude Code. Adopt with the same posture as JANGTQ — useful, watched, not yet load-bearing.
+
+### When you'd use pi today
+
+- **Active experimentation against `ds4`** (see [V4-Flash decisions](#decisions)) — the `pi-ds4` extensions are the polished path.
+- **Multi-provider session** where you want to swap models mid-conversation — Anthropic for one turn, local Qwen for the next, cloud audition for a third.
+- **Android or Linux client** against the apple-track LiteLLM proxy or the SOV cloud audition — pi is one of the few harnesses that runs natively on both.
+- **As a benchmarking foil** to Aider for the same workload — same backend, different harness, see what the harness layer actually costs.
+
+For the SOV phase-1 default (Aider against `local-small` via LiteLLM), nothing changes. pi is *additive* — install it alongside Aider, point it at the same LiteLLM proxy, use whichever fits the task.
+
 ## Why runtime choice changes "MLX speed"
 
 A common confusion: "the same MLX model runs at different tok/s in Ollama vs LM Studio vs Jan vs `mlx_lm.server` — why?" Because **a model file is inert weights; speed is a property of the stack that runs it.** The weights are maybe 10% of the story. Observed throughput is roughly:
@@ -323,6 +387,7 @@ Sizes below are indicative (from one 128 GB Mac mid-phase-1); yours will differ.
 | `~/Library/Application Support/Jan/data/llamacpp/models` | several GB | Jan's Cortex/GGUF models | re-download in Jan |
 | `~/Library/Application Support/Jan/data/mlx/models` | grows if Jan-as-MLX used | Jan's native-MLX models | re-download in Jan |
 | `~/MLXModels` | grows if Osaurus used | Osaurus's MLX model directory (default; override via `OSU_MODELS_DIR`) | re-download in Osaurus |
+| `~/.pi` | up to ~90 GB if `pi-ds4` installed | pi harness extensions + their model downloads (the `pi-ds4` extension drops the ~87 GB V4-Flash GGUF here) | `pi install <ext-url>` re-downloads |
 | `~/.local/share/uv` | 2–3 GB | installed uv tools (mlx-lm, litellm, aider…) | re-run the `uv tool install` lines |
 
 `Jan` and `jan` under Application Support are the **same directory** (case-insensitive APFS — same inode), not two; don't double-count or double-exclude.
@@ -338,6 +403,7 @@ model_dirs=(
   "$HOME/Library/Application Support/Jan/data/llamacpp/models"
   "$HOME/Library/Application Support/Jan/data/mlx/models"
   ~/MLXModels                                                            # Osaurus default; or $OSU_MODELS_DIR
+  ~/.pi                                                                  # pi harness + extension downloads (pi-ds4 lands ~87 GB V4 GGUF here)
   ~/.local/share/uv                                                      # optional — re-run `uv tool install` after restore
 )
 
@@ -370,6 +436,7 @@ Judgement calls:
 - **Jan: exclude the two `*/models` subdirs, not the whole `Jan/` dir.** The parent also holds conversation history and settings — small and worth keeping. If you don't care about Jan chat history, excluding `"$HOME/Library/Application Support/Jan"` wholesale is simpler.
 - **Osaurus: exclude `~/MLXModels` wholesale** (or wherever `OSU_MODELS_DIR` points). Conversation history, agent state, identity keys live elsewhere under `~/Library/Application Support/Osaurus` — *keep* those; they're small and re-deriving identity keys is annoying.
 - **LM Studio: exclude `~/.lmstudio` wholesale, or just uninstall.** LM Studio is dominated by Osaurus on every axis that matters to this track (see [Osaurus vs LM Studio](#osaurus-vs-lm-studio) below) — its presence in the exclusion list is for collaborators who still have it installed from earlier exploration, not because we recommend keeping it around.
+- **pi: prefer excluding the extension subdir, not `~/.pi` wholesale.** `~/.pi/agent/models.json`, slash-command history, and pi's small config are *worth keeping* — backing them up reproduces your per-collaborator harness state. The heavy thing is what extensions download; `pi-ds4` lands the V4-Flash GGUF (~87 GB) inside its own extension dir. If you have only one extension installed and it's `pi-ds4`, the wholesale `~/.pi` exclusion above is fine; if you want finer control, exclude `~/.pi/extensions/` (or whatever exact path your pi version uses for extension assets — check with `du -sh ~/.pi/*` first, since pi's layout has churned during early development).
 - **`~/.cache/huggingface` is the win** — the one that actually matters; everything else is rounding error by comparison.
 
 #### Image-gen tools (phase 4 — paths confirmed when installed)
@@ -383,6 +450,8 @@ Not on the critical path until [phase 4](#sub-phases), but they balloon backups 
 
 - **MCP-based RAG inside Jan vs. dedicated AnythingLLM.** Phase 2 uses AnythingLLM for time-to-working. A later phase may swap to a Zotero MCP server feeding Jan directly, which is more SOV-spirit (composable parts). Decision deferred to phase-2 retro.
 - **opencode adoption.** Phase 4 scopes it as an Aider-alternative experiment. If it works well on `local-small`, may promote it; if it's too token-hungry for 30B-class models, stays an experiment.
+- **`pi` as the canonical apple-track harness.** Phase 4 currently scopes pi as a side-quest. The argument for promotion to primary (alongside or replacing Aider for the agentic POC slot) is the [Schelling-point story](#pi-as-the-cross-track-harness): one harness across apple-personal, the SOV cloud audition, and the eventual cooperative DGX endpoint. Argument against: Aider's diff-based code-editing flow is currently sharper for the small-model code-editing workflow phase 1 actually tests. Decision deferred to phase-4 once we've used pi in anger for a few sessions; in the meantime pi and Aider coexist pointed at the same LiteLLM proxy.
+- **DwarfStar / `ds4` as a V4-Flash path.** Currently flagged as a parallel experiment alongside JANGTQ2 (see [V4-Flash decisions](#decisions)). Promotion criteria mirror JANGTQ2's: measured quality on real prompts + a `bin/model-switch.sh`-compatible wrapper or a clean OpenAI-compat behind LiteLLM. The `audreyt/pi-ds4` fork specifically — abliterated weights + uncertainty-mode steering — is also a working reference for what the cloud-track [phase 2 workstream A](../PLAN.md#workstream-a-abliteration) outcome should feel like; worth a separate evaluation pass even if `ds4` doesn't become primary.
 - **Cloud routing through LiteLLM.** Phase 2 wires Anthropic / OpenAI into LiteLLM as fallback aliases for when local context is insufficient (deferred from phase 1 to keep the SOV-style stack rollout focused on local-only first). Flight-mode behaviour: model alias errors out cleanly if upstream unreachable, the local aliases keep working.
 - **Embedding model upgrade.** Phase 2 uses the existing `mxbai-embed-large` via Ollama, but that model's Ollama distribution has been frozen at v1 since 2024 — Mixedbread's 2026 flagship (Wholembed v3) is hosted-only. For an open-weight upgrade path the field has moved to [Qwen3-Embedding](https://huggingface.co/Qwen) and Jina v5. Re-evaluate at phase 2 if retrieval quality is the bottleneck.
 
@@ -402,10 +471,12 @@ This page dates fast — model names, CLI verbs and node-pack repos churn. **Bef
 | Osaurus | [osaurus-ai/osaurus](https://github.com/osaurus-ai/osaurus) · [docs.osaurus.ai](https://docs.osaurus.ai) |
 | AnythingLLM | [docs.anythingllm.com](https://docs.anythingllm.com/installation-desktop/macos) |
 | Aider | [aider.chat/docs/llms/openai-compat.html](https://aider.chat/docs/llms/openai-compat.html) |
+| `pi` harness | [earendil-works/pi](https://github.com/earendil-works/pi) |
+| DwarfStar / `ds4` | [antirez/ds4](https://github.com/antirez/ds4) · [mitsuhiko/pi-ds4](https://github.com/mitsuhiko/pi-ds4) · [audreyt/pi-ds4](https://github.com/audreyt/pi-ds4) (abliterated fork) |
 | opencode | [github.com/sst/opencode](https://github.com/sst/opencode) |
 | Draw Things | [drawthings.ai](https://drawthings.ai) |
 | ComfyUI + node packs | [comfyanonymous/ComfyUI](https://github.com/comfyanonymous/ComfyUI) · [city96/ComfyUI-GGUF](https://github.com/city96/ComfyUI-GGUF) |
 
 When something on this list goes stale, fix it in place and bump a "last freshness audit" note here so the next bootstrap doesn't repeat the same hunt.
 
-**Last freshness audit:** 2026-05-12.
+**Last freshness audit:** 2026-05-26 (added stack-vocabulary layering, `pi` as cross-track harness, DwarfStar/`ds4`/`pi-ds4`).
