@@ -23,22 +23,24 @@ This is a *personal* stack — currently just for Dan but should be generic acro
 
 Image generation (Draw Things, ComfyUI) and audio generation (Stable Audio Open, deferred) sit beside this core.
 
-## Stack vocabulary
+## Apple-track specialisation
 
-A local-LLM setup is a vertical stack of layers, and most "this app is faster than that one" or "why doesn't X work with Y" debates are really about which layer changed. The names below are the lingua franca for the rest of this doc (and a near-mirror of the [companion blog notebook's](https://danmackinlay.name/notebook/local_llm_mac.html#the-stack) version):
+The general layered shape (model / quant format / runtime / server / harness / frontend) is in [`docs/context/stack-vocabulary.md`](../docs/context/stack-vocabulary.md) — same vocabulary applies to both SOV tracks. This section is just the **apple-specific defaults and alternatives per layer**.
 
-| Layer | What | Apple-track default | Other options |
+| Layer | Apple-track default | Apple-specific alternatives | Notes |
 |---|---|---|---|
-| **Model** | The weights — `.safetensors`, distributed from Hugging Face | Qwen3.5-35B-A3B etc. (see [Models](#models)) | Any HF-distributed open-weight model |
-| **Quant format** | How weights are stored on disk; different runtimes read different formats | MLX 4-bit (mlx-community ports) | GGUF (llama.cpp / Ollama), JANGTQ (Osaurus/jang-tools), `mxtq`, AWQ, FP8, … |
-| **Runtime / inference engine** | The code that runs the matmuls — where the GPU work happens | MLX via `mlx-lm` (Python) | llama.cpp (via Cortex/Ollama), `vmlx-swift-lm` (via Osaurus, Swift), `ds4` (native Metal, V4-Flash only) |
-| **Server / daemon** | Long-lived process exposing an OpenAI-compatible HTTP endpoint | `mlx_lm.server` on `:8080` | Ollama (`:11434`), Osaurus (`:1337`, also Anthropic + Ollama compat), `ds4-server` (`:8000`), `llama-server` |
-| **Harness / agent loop** | Orchestration over the server — conversation state, tool calls, multi-turn agent loops, model switching | Aider for code; Jan for chat (Jan is a *thin* harness) | [`pi`](#pi-as-the-cross-track-harness) (npm, cross-platform, provider-agnostic), Osaurus (built-in), OpenCode, Continue, Claude Code (vendor-locked) |
-| **Frontend / chat client** | The human-facing surface | Jan | Osaurus's chat window, LibreChat, LM Studio, web UIs, terminal TUIs (`pi`'s own) |
+| **Model** | Qwen3.5-35B-A3B etc. (see [Models](#models)) | Any HF model with an MLX or GGUF port | Daily picks tuned to unified-memory tiers |
+| **Quant format** | MLX 4-bit (mlx-community ports) | GGUF (via llama.cpp / Ollama), JANGTQ (Osaurus / jang-tools), `mxtq` | No CUDA-only formats (AWQ, FP8 on Hopper) — Apple Silicon path is MLX-or-GGUF |
+| **Runtime / inference engine** | MLX via `mlx-lm` (Python) | llama.cpp (via Cortex/Ollama), `vmlx-swift-lm` (Swift, via Osaurus), `ds4` (native Metal, V4-Flash only) | Apple Silicon means GPU work runs through Metal; MLX is Apple's first-party path |
+| **Server / daemon** | `mlx_lm.server` on `:8080` | Ollama (`:11434`), Osaurus (`:1337`; also Anthropic + Ollama compat), `ds4-server` (`:8000`), `llama-server`, LiteLLM (`:4000`, as router in phase 1) | One MLX model per `mlx_lm.server` process — discipline lives in `bin/model-switch.sh` |
+| **Harness / agent loop** | Aider (code); Jan (chat — a *thin* harness) | [`pi`](#pi-as-the-cross-track-harness) (npm, cross-platform, provider-agnostic), Osaurus (built-in), OpenCode, Continue, Claude Code (vendor-locked) | Same layer on the cloud track — the harness is where cross-track muscle memory lives |
+| **Frontend / chat client** | Jan | Osaurus's chat window, LM Studio, LibreChat (phase-4), web UIs, harness TUIs (pi's own) | Jan-as-thin-client beats Jan-as-full-stack for SOV — see [Why Jan as a thin client](#why-jan-as-a-thin-client-not-as-a-full-stack) |
 
-Most apps you've heard of are *vertical bundles*: Osaurus is frontend + harness + server + runtime in one; Ollama is server + runtime; Jan-as-thin-client is frontend pointed at someone else's server. SOV's apple-track default is the *unbundled* version — `mlx-lm` runtime, `mlx_lm.server` daemon, Aider/pi harness, Jan frontend — so any one layer can swap without disturbing the rest. The [Jan-thin-client](#why-jan-as-a-thin-client-not-as-a-full-stack) discussion, the [Osaurus-as-comprehensive-alternative](#osaurus-as-a-comprehensive-swift-native-alternative) discussion, and the [pi-as-cross-track-harness](#pi-as-the-cross-track-harness) discussion are all variations on "swap one layer, keep the rest."
+SOV's apple-track default is the **unbundled** version — `mlx-lm` runtime, `mlx_lm.server` daemon, Aider / `pi` harness, Jan frontend — so any one layer can swap without disturbing the rest. The discussions later in this doc are variations on "swap one layer, keep the rest":
 
-The **harness layer** is where the apple-track / cloud-track muscle memory actually lives. A harness manages conversation state and connects to whichever OpenAI-compatible endpoint you point it at — that endpoint can be a local `mlx_lm.server`, a LiteLLM proxy, the audition's vLLM-on-RunPod, or Anthropic / OpenAI cloud APIs. **Picking a provider-agnostic, no-GUI-lock-in harness is what collapses the apple-personal and cloud-cooperative experiences into the same workflow.** The blog post's [member-side-stack section](https://danmackinlay.name/notebook/aus_sovereign_llm.html#the-member-side-stack) applies the same idea to the cooperative case.
+- [Why Jan as a thin client, not as a full stack](#why-jan-as-a-thin-client-not-as-a-full-stack) — frontend-layer choice
+- [Osaurus as a comprehensive Swift-native alternative](#osaurus-as-a-comprehensive-swift-native-alternative) — a vertical-bundle alternative that owns multiple layers
+- [`pi` as the cross-track harness](#pi-as-the-cross-track-harness) — harness-layer choice; the layer where SOV-apple and SOV-cloud actually converge
 
 ## Stack at a glance
 
@@ -251,7 +253,7 @@ LM Studio remains in the [Why runtime choice changes "MLX speed"](#why-runtime-c
 
 ## `pi` as the cross-track harness
 
-[**`pi`**](https://github.com/earendil-works/pi) ([earendil-works/pi](https://github.com/earendil-works/pi), MIT, npm-installable — see the upstream README for the current install incantation, which has churned during early development) is [Mario Zechner](https://github.com/badlogic)'s ([libGDX](https://libgdx.com)) cross-platform agent harness. It is the **harness layer** of the [stack vocabulary](#stack-vocabulary) above — manages tool-call loops, conversation state, slash commands; talks to whichever OpenAI- or Anthropic-compatible endpoint you point it at. Not a runtime, not a chat window in the Jan/LM-Studio/Osaurus sense (though it has a built-in TUI). Specifically:
+[**`pi`**](https://github.com/earendil-works/pi) ([earendil-works/pi](https://github.com/earendil-works/pi), MIT, npm-installable — see the upstream README for the current install incantation, which has churned during early development) is [Mario Zechner](https://github.com/badlogic)'s ([libGDX](https://libgdx.com)) cross-platform agent harness. It is the **harness layer** of the [stack vocabulary](../docs/context/stack-vocabulary.md) — manages tool-call loops, conversation state, slash commands; talks to whichever OpenAI- or Anthropic-compatible endpoint you point it at. Not a runtime, not a chat window in the Jan/LM-Studio/Osaurus sense (though it has a built-in TUI). Specifically:
 
 - **Cross-platform** — Node, runs on macOS, Linux, Windows, **and Android** via Termux.
 - **Provider-agnostic by design** — 15+ named providers (Anthropic, OpenAI, Google, xAI, Groq, Cerebras, …) plus arbitrary OpenAI- or Anthropic-compatible endpoints via a small JSON config (`~/.pi/agent/models.json`). The collective endpoint, your local `mlx_lm.server`, the SOV phase-1 LiteLLM proxy, the SOV cloud audition's vLLM-on-RunPod, your Anthropic key, and your Ollama instance can all sit in the same config; switch between them with `/model` or `Ctrl+L` inside an active session.
